@@ -1,0 +1,4 @@
+src/bitecoin_server
+src/bitecoin_miner
+src/bitecoin_client
+src/*.o
