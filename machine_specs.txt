@@ -1,0 +1,7 @@
+G2 instances provide access to NVIDIA GRID GPUs (“Kepler” GK104) each with 1,536 CUDA cores and 4GB of video memory.
+
+Instance-Family  Instance-Type  Processor-Arch  vCPU  ECU  Memory-(GiB)        Instance-Storage-(GB)  EBS-optimized-Available  Network-Performance
+GPU-instances    g2.2xlarge     64-bit          8     26   15                  1x60-SSD               Yes                      High
+
+Instance-Family  Instance-Type  Processor-Arch  vCPU  ECU  Physical-Processor  Intel-AES-NI-Intel     AVX                      Intel-Turbo
+GPU-instances    g2.2xlarge     64-bit          8     26   Intel-Xeon-E5-2670  Yes                    Yes                      Yes
