@@ -1,7 +1,8 @@
 SHELL=/bin/bash
 
 CPPFLAGS += -std=c++11 -W -Wall  -g
-CPPFLAGS += -O3 -ltbb
+CPPFLAGS += -O3 -lrt
+#-ltbb
 CPPFLAGS += -I include
 
 CLIENT=src/bitecoin_miner
