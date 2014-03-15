@@ -1,0 +1,4 @@
+- made fnv hash be computed once per microround
+- made fnv hash only recompute the new data in the blockchain
+
+todo: make only 1/2 indices per run
