@@ -1,7 +1,7 @@
 SHELL=/bin/bash
 
 CPPFLAGS += -std=c++11 -W -Wall  -g
-CPPFLAGS += -O3 -lrt
+CPPFLAGS += -lrt
 #-ltbb
 CPPFLAGS += -I include -I src/miner
 
@@ -11,7 +11,7 @@ EXCHANGE_PORT = 4123
 LOG_LEVEL = 3
 # For your makefile, add TBB and OpenCL as appropriate
 
-default: connect_exchange
+all: src/bitecoin_server src/bitecoin_miner src/bitecoin_client
 
 # Launch client and server connected by pipes
 launch_pipes: src/bitecoin_server $(CLIENT)
@@ -43,4 +43,4 @@ clean:
 		src/miner/*.o
 
 .PHONY: launch_pipes launch_infinite_server connect_exchange connect_local\
-	clean default launch_server
+	clean all launch_server
