@@ -41,7 +41,7 @@ void PoolHashStep(bigint_t &x, const Packet_ServerBeginRound *pParams) {
   // hi(x) = hi(tmp) + carry
   wide_add(4, x.limbs + 4, tmp.limbs + 4, carry);
 
-  // overall:  tmp=lo(x)*c; x=tmp>hi(x)
+  // overall:  tmp=lo(x)*c; x=tmp+hi(x)
 }
 
 // Given the various round parameters, this calculates the hash for a particular
