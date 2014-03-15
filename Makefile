@@ -6,6 +6,8 @@ CPPFLAGS += -O3 -lrt
 CPPFLAGS += -I include
 
 CLIENT=src/bitecoin_miner
+EXCHANGE_ADDR = 155.198.117.237
+EXCHANGE_PORT = 4123
 # For your makefile, add TBB and OpenCL as appropriate
 
 # Launch client and server connected by pipes
