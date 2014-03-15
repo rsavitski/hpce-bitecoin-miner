@@ -9,6 +9,7 @@ CLIENT=src/bitecoin_miner
 EXCHANGE_ADDR = 155.198.117.237
 EXCHANGE_PORT = 4123
 LOG_LEVEL = 3
+CLIENT_ID = $(shell echo "$USER" | md5sum | cut -c 1-32)
 # For your makefile, add TBB and OpenCL as appropriate
 
 all: src/bitecoin_server src/bitecoin_miner src/bitecoin_client
@@ -36,7 +37,7 @@ connect_local: $(CLIENT)
 
 # Launch a client connected to a shared exchange
 connect_exchange: $(CLIENT)
-	$(CLIENT) client-$(USER) $(LOG_LEVEL) tcp-client $(EXCHANGE_ADDR)  $(EXCHANGE_PORT)
+	$(CLIENT) $(CLIENT_ID) $(LOG_LEVEL) tcp-client $(EXCHANGE_ADDR)  $(EXCHANGE_PORT)
 
 clean:
 	rm -f src/*.o src/bitecoin_client src/bitecoin_miner src/bitecoin_server\
