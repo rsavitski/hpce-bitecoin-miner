@@ -27,6 +27,9 @@ launch_infinite_server: src/bitecoin_server
 		src/bitecoin_server server1-$USER $(LOG_LEVEL) tcp-server 4000; \
 	done;
 
+launch_server: src/bitecoin_server
+	src/bitecoin_server server1-$USER $(LOG_LEVEL) tcp-server 4000;
+
 # Launch a client connected to a local server
 connect_local: $(CLIENT)
 	$(CLIENT) client-$USER $(LOG_LEVEL) tcp-client localhost 4000
@@ -40,4 +43,4 @@ clean:
 		src/miner/*.o
 
 .PHONY: launch_pipes launch_infinite_server connect_exchange connect_local\
-	clean default
+	clean default launch_server
