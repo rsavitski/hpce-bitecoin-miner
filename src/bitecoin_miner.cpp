@@ -1,5 +1,5 @@
 #include "bitecoin_protocol.hpp"
-#include "bitecoin_endpoint_client.hpp"
+#include "bitecoin_endpoint_miner.hpp"
 
 #include <iostream>
 
@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
     std::unique_ptr<bitecoin::Connection> connection{ bitecoin::OpenConnection(
         spec) };
 
-    bitecoin::EndpointClient endpoint(clientId, minerId, connection, logDest);
+    bitecoin::EndpointMiner endpoint(clientId, minerId, connection, logDest);
     endpoint.Run();
   }
   catch (std::string &msg) {
