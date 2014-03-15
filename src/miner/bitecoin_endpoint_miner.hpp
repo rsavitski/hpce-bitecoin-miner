@@ -28,7 +28,9 @@ private:
   std::map<std::string, unsigned> m_knownCoins;
 
 public:
-  using EndpointClient::EndpointClient;
+  EndpointMiner(std::string clientId, std::string minerId,
+                std::unique_ptr<Connection> &conn, std::shared_ptr<ILog> &log)
+      : EndpointClient(clientId, minerId, conn, log) {}
 
   /* Here is a default implementation of make bid.
           I would suggest that you override this method as a starting point.
@@ -77,8 +79,7 @@ public:
         indices[j] = curr;
       }
 
-      bigint_t proof =
-          HashMiner(roundInfo.get(), indices.size(), &indices[0]);
+      bigint_t proof = HashMiner(roundInfo.get(), indices.size(), &indices[0]);
       double score = wide_as_double(BIGINT_WORDS, proof.limbs);
       Log(Log_Debug, "    Score=%lg", score);
 
