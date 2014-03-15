@@ -1,7 +1,7 @@
 SHELL=/bin/bash
 
 CPPFLAGS += -std=c++11 -W -Wall  -g
-CPPFLAGS += -lrt
+CPPFLAGS += -O3 -lrt
 #-ltbb
 CPPFLAGS += -I include -I src/miner
 
