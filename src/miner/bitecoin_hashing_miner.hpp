@@ -69,23 +69,6 @@ public:
   }
 };
 
-// This provides a primitive randomness step. It is not cryptographic quality,
-// but suffices for these purposes. There is a constant c that comes from the
-// server at the beginning of the round that gets used here.
-void PoolHashMinerStep(bigint_t &x, const Packet_ServerBeginRound *pParams) {
-  assert(NLIMBS == 4 * 2);
-
-  bigint_t tmp;
-  // tmp=lo(x)*c;
-  wide_mul(4, tmp.limbs + 4, tmp.limbs, x.limbs, pParams->c);
-  // [carry,lo(x)] = lo(tmp)+hi(x)
-  uint32_t carry = wide_add(4, x.limbs, tmp.limbs, x.limbs + 4);
-  // hi(x) = hi(tmp) + carry
-  wide_add(4, x.limbs + 4, tmp.limbs + 4, carry);
-
-  // overall:  tmp=lo(x)*c; x=tmp>hi(x)
-}
-
 // Given the various round parameters, this calculates the hash for a particular
 // index value.
 // Multiple hashes of different indices will be combined to produce the overall
@@ -107,7 +90,13 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
 
   // Now step forward by the number specified by the server
   for (unsigned j = 0; j < pParams->hashSteps; j++) {
-    PoolHashMinerStep(x, pParams);
+    bigint_t tmp;
+    // tmp=lo(x)*c;
+    wide_mul(4, tmp.limbs + 4, tmp.limbs, x.limbs, pParams->c);
+    // [carry,lo(x)] = lo(tmp)+hi(x)
+    uint32_t carry = wide_add(4, x.limbs, tmp.limbs, x.limbs + 4);
+    // hi(x) = hi(tmp) + carry
+    wide_add(4, x.limbs + 4, tmp.limbs + 4, carry);
   }
   return x;
 }
