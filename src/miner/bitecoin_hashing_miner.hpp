@@ -79,15 +79,8 @@ bigint_t HashMiner(const Packet_ServerBeginRound *pParams,
         "HashMiner - Too many indices for parameter set.");
 
   bigint_t acc;
-  wide_zero(8, acc.limbs);
 
   for (unsigned i = 0; i < nIndices; i++) {
-    if (i > 0) {
-      if (pIndices[i - 1] >= pIndices[i])
-        throw std::invalid_argument("HashMiner - Indices are not in "
-                                    "monotonically increasing order.");
-    }
-
     // Calculate the hash for this specific point
     bigint_t point = PoolHashMiner(pParams, pIndices[i]);
 
