@@ -9,7 +9,7 @@ CLIENT=src/bitecoin_miner
 EXCHANGE_ADDR = 155.198.117.237
 EXCHANGE_PORT = 4123
 LOG_LEVEL = 3
-CLIENT_ID = $(shell echo "$USER" | md5sum | cut -c 1-32)
+CLIENT_ID = $(shell head -c 512 /dev/urandom | md5sum | cut -c 1-32)
 # For your makefile, add TBB and OpenCL as appropriate
 
 all: src/bitecoin_server src/bitecoin_miner src/bitecoin_client
