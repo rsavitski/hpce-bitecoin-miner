@@ -8,6 +8,7 @@
 #include <cstring>
 #include <cassert>
 
+#include <algorithm>
 #include <vector>
 #include <memory>
 #include <map>
@@ -66,18 +67,33 @@ public:
     std::vector<uint32_t> bestSolution(roundInfo->maxIndices);
     bigint_t bestProof;
     wide_ones(BIGINT_WORDS, bestProof.limbs);
+      
+    // do only 2 indices
+    uint32_t capped_num = std::min(roundInfo->maxIndices, 2u);
+    std::vector<uint32_t> indices(capped_num);
+      indices[0] = 1 + (rand() % 10);
+      indices[1] = indices[0] + 1 + (rand() % 10);
+      //indices[1] = 0x80000000;
 
     unsigned nTrials = 0;
     while (1) {
       ++nTrials;
 
       Log(Log_Debug, "Trial %d.", nTrials);
-      std::vector<uint32_t> indices(roundInfo->maxIndices);
-      uint32_t curr = 0;
-      for (unsigned j = 0; j < indices.size(); j++) {
-        curr = curr + 1 + (rand() % 10);
-        indices[j] = curr;
-      }
+
+      if (1){
+        indices[0] += 1 + (rand() % 10);
+        indices[1] = 0xffffffff - indices[0];
+        } else{
+          indices[0] += 1;
+          indices[1] += 1;
+        }
+
+      //uint32_t curr = 0;
+      //for (unsigned j = 0; j < indices.size(); j++) {
+      //  curr = curr + 1 + (rand() % 10);
+      //  indices[j] = curr;
+      //}
 
       bigint_t proof = HashMiner(roundInfo.get(), indices.size(), &indices[0]);
       double score = wide_as_double(BIGINT_WORDS, proof.limbs);
@@ -101,6 +117,12 @@ public:
       if (timeBudget <= 0)
         break; // We have run out of time, send what we have
     }
+    Log(Log_Fatal, "Hashsteps: %u", roundInfo->hashSteps);
+    Log(Log_Fatal, "salt: %x", roundInfo->roundSalt);
+    Log(Log_Fatal, "roundid: %x", roundInfo->roundId);
+    Log(Log_Fatal, "Performed %u tries", nTrials);
+    Log(Log_Fatal, "Period: %lf", period);
+    Log(Log_Fatal, "Effective hashrate: %f", (float)nTrials/period);
 
     solution = bestSolution;
     wide_copy(BIGINT_WORDS, pProof, bestProof.limbs);
