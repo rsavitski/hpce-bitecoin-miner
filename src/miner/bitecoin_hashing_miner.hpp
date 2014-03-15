@@ -18,6 +18,57 @@
 
 namespace bitecoin {
 
+class fnvIterative {
+  static const uint64_t FNV_64_PRIME = 0x100000001b3ULL;
+  uint64_t m_offset;
+
+  fnvIterative(const uint64_t init = INIT) : m_offset(init) {}
+  fnvIterative(fnvIterative const &);
+  void operator=(fnvIterative const &);
+
+public:
+  static fnvIterative &getInstance() {
+    static fnvIterative instance;
+    return instance;
+  }
+  static const uint64_t INIT = 0xcbf29ce484222325ULL;
+
+  void reset() { offset(INIT); }
+  void offset(uint64_t init = INIT) { m_offset = init; }
+
+  uint64_t operator()(const std::string &_buf) {
+    return operator()(_buf.c_str(), _buf.length());
+  }
+
+  uint64_t operator()(const char *_buf, size_t _len) {
+    const unsigned char *bp =
+        reinterpret_cast<const unsigned char *>(_buf); /* start of buffer */
+    const unsigned char *be = bp + _len; /* beyond end of buffer */
+
+    uint64_t hval = m_offset;
+
+    /*
+     * FNV-1a hash each octet of the buffer
+     */
+    while (bp < be) {
+
+      /* xor the bottom with the current octet */
+      hval ^= (uint64_t) * bp++;
+
+/* multiply by the 64 bit FNV magic prime mod 2^64 */
+
+#if defined(NO_FNV_GCC_OPTIMIZATION)
+      hval *= FNV_64_PRIME;
+#else
+      hval += (hval << 1) + (hval << 4) + (hval << 5) + (hval << 7) +
+              (hval << 8) + (hval << 40);
+#endif
+    }
+
+    return m_offset = hval;
+  }
+};
+
 // This provides a primitive randomness step. It is not cryptographic quality,
 // but suffices for these purposes. There is a constant c that comes from the
 // server at the beginning of the round that gets used here.
@@ -39,26 +90,20 @@ void PoolHashMinerStep(bigint_t &x, const Packet_ServerBeginRound *pParams) {
 // index value.
 // Multiple hashes of different indices will be combined to produce the overall
 // result.
-bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index) {
+bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
+                       uint64_t chainHash) {
   assert(NLIMBS == 4 * 2);
-
-  // Incorporate the existing block chain data - in a real system this is the
-  // list of transactions we are signing. This is the FNV hash:
-  // http://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
-  hash::fnv<64> hasher;
-  uint64_t chainHash =
-      hasher((const char *)&pParams->chainData[0], pParams->chainData.size());
 
   // The value x is 8 words long (8*32 bits in total)
   // We build (MSB to LSB) as  [ chainHash ; roundSalt ; roundId ; index ]
   bigint_t x;
   x.limbs[0] = index;
-  x.limbs[2] = (uint32_t) (pParams->roundId & 0xFFFFFFFFULL);
-  x.limbs[3] = (uint32_t) (pParams->roundId & 0xFFFFFFFFULL);
-  x.limbs[4] = (uint32_t) (pParams->roundSalt & 0xFFFFFFFFULL);
-  x.limbs[5] = (uint32_t) (pParams->roundSalt & 0xFFFFFFFFULL);
-  x.limbs[6] = (uint32_t) (chainHash & 0xFFFFFFFFULL);
-  x.limbs[7] = (uint32_t) (chainHash & 0xFFFFFFFFULL);
+  x.limbs[2] = (uint32_t)(pParams->roundId & 0xFFFFFFFFULL);
+  x.limbs[3] = (uint32_t)(pParams->roundId & 0xFFFFFFFFULL);
+  x.limbs[4] = (uint32_t)(pParams->roundSalt & 0xFFFFFFFFULL);
+  x.limbs[5] = (uint32_t)(pParams->roundSalt & 0xFFFFFFFFULL);
+  x.limbs[6] = (uint32_t)(chainHash & 0xFFFFFFFFULL);
+  x.limbs[7] = (uint32_t)(chainHash & 0xFFFFFFFFULL);
 
   // Now step forward by the number specified by the server
   for (unsigned j = 0; j < pParams->hashSteps; j++) {
@@ -72,17 +117,22 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index) {
 // and the solution, which is a vector of indices, it calculates the proof. The
 // goodness
 // of the solution is determined by the numerical value of the proof.
-bigint_t HashMiner(const Packet_ServerBeginRound *pParams,
-                       unsigned nIndices, const uint32_t *pIndices) {
+bigint_t HashMiner(const Packet_ServerBeginRound *pParams, unsigned nIndices,
+                   const uint32_t *pIndices) {
   if (nIndices > pParams->maxIndices)
     throw std::invalid_argument(
         "HashMiner - Too many indices for parameter set.");
+  static size_t previousChainSize = 0;
+  uint64_t chainHash = fnvIterative::getInstance()(
+      (const char *)&pParams->chainData[previousChainSize],
+      pParams->chainData.size() - previousChainSize);
+  previousChainSize = pParams->chainData.size();
 
   bigint_t acc;
 
   for (unsigned i = 0; i < nIndices; i++) {
     // Calculate the hash for this specific point
-    bigint_t point = PoolHashMiner(pParams, pIndices[i]);
+    bigint_t point = PoolHashMiner(pParams, pIndices[i], chainHash);
 
     // Combine the hashes of the points together using xor
     wide_xor(8, acc.limbs, acc.limbs, point.limbs);
