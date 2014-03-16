@@ -60,6 +60,9 @@ class EndpointMiner : public EndpointClient
     /* This is when the server has said all bids must be produced by, plus the
             adjustment for clock skew, and the safety margin
     */
+
+    tSafetyMargin += 0.3; // from binning //TODO
+
     double tFinish =
         request->timeStampReceiveBids * 1e-9 + skewEstimate - tSafetyMargin;
 
@@ -68,7 +71,6 @@ class EndpointMiner : public EndpointClient
     /*
             We will use this to track the best solution we have created so far.
     */
-    std::vector<uint32_t> bestSolution(roundInfo->maxIndices);
     bigint_t bestProof;
     wide_ones(BIGINT_WORDS, bestProof.limbs);
 
@@ -78,11 +80,12 @@ class EndpointMiner : public EndpointClient
         roundInfo->chainData.size() - previousChainSize);
     previousChainSize = roundInfo->chainData.size();
 
-    // do only 2 indices
-    uint32_t capped_num = std::min(roundInfo->maxIndices, 2u);
-    std::vector<uint32_t> indices(capped_num);
-    indices[0] = 1 + (rand() % 10);
-    indices[1] = indices[0] + 1 + (rand() % 10);
+    // std::vector<uint32_t> bestSolution(roundInfo->maxIndices);
+    std::vector<uint32_t> bestSolution(2u);
+    const unsigned BIN_SIZE = 10000;
+    uint32_t indx[2][BIN_SIZE];
+    bigint_t hashes[2][BIN_SIZE];
+
 
     unsigned nTrials = 0;
     while (1) {
@@ -90,35 +93,40 @@ class EndpointMiner : public EndpointClient
 
       Log(Log_Debug, "Trial %d.", nTrials);
 
-      // TODO: why +1 to both terrible? salt being zero? c being ffff?
-      indices[0] += 1 + (rand() % 10);
-      // indices[1] = indices[0] + 1 + (rand() % 10);
-      indices[1] = 0xffffffff - indices[0];
-
-      bigint_t acc;
-      for (unsigned i = 0; i < indices.size(); i++) {
-        // Calculate the hash for this specific point
-        bigint_t point = PoolHashMiner(roundInfo.get(), indices[i], chainHash);
-
-        // Combine the hashes of the points together using xor
-        wide_xor(8, acc.limbs, acc.limbs, point.limbs);
+      for (unsigned i = 0; i < BIN_SIZE; ++i) {
+        indx[0][i]= rand()&0x7fffffff;
+        hashes[0][i] = PoolHashMiner(roundInfo.get(), indx[0][i], chainHash);
       }
-      bigint_t proof = acc;
-
-      // bigint_t proof = HashMiner(roundInfo.get(), indices.size(),
-      // &indices[0]);
-      double score = wide_as_double(BIGINT_WORDS, proof.limbs);
-      //Log(Log_Debug, "    Score=%lg", score);
-
-      if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0) {
-        double worst =
-            pow(2.0, BIGINT_LENGTH * 8);  // This is the worst possible score
-        Log(Log_Verbose,
-            "    Found new best, nTrials=%d, score=%lg, ratio=%lg.", nTrials,
-            score, worst / score);
-        bestSolution = indices;
-        bestProof = proof;
+      for (unsigned i = 0; i < BIN_SIZE; ++i) {
+        indx[1][i]= (1<<31) | (rand()&0x7fffffff);
+        hashes[1][i] = PoolHashMiner(roundInfo.get(), indx[1][i], chainHash);
       }
+
+
+      for (unsigned i = 0; i < BIN_SIZE; ++i) {
+        for (unsigned j = 0; j < BIN_SIZE; ++j) {
+          bigint_t proof;
+          wide_xor(8, proof.limbs, hashes[0][i].limbs, hashes[1][j].limbs);
+          if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0) {
+            bestProof = proof;
+            bestSolution[0] = indx[0][i];
+            bestSolution[1] = indx[1][j];
+          }
+        }
+      }
+
+      // double score = wide_as_double(BIGINT_WORDS, proof.limbs);
+      ////Log(Log_Debug, "    Score=%lg", score);
+
+      // if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0) {
+      //  double worst =
+      //      pow(2.0, BIGINT_LENGTH * 8);  // This is the worst possible score
+      //  Log(Log_Verbose,
+      //      "    Found new best, nTrials=%d, score=%lg, ratio=%lg.", nTrials,
+      //      score, worst / score);
+      //  bestSolution = indices;
+      //  bestProof = proof;
+      //}
 
       double t = now() * 1e-9;  // Work out where we are against the deadline
       double timeBudget = tFinish - t;
