@@ -1,8 +1,8 @@
 SHELL=/bin/bash
-
+# For some reason GCC won't compile stuff that can link with OpenCL...
+CXX=clang++
 CPPFLAGS += -std=c++11 -W -Wall  -g
-CPPFLAGS += -O3 -lrt
-#-ltbb
+CPPFLAGS += -O3 -lrt -lOpenCL
 CPPFLAGS += -I include -I src/miner
 
 CLIENT=src/bitecoin_miner
