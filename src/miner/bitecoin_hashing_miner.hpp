@@ -75,7 +75,7 @@ public:
 // result.
 bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
                        uint64_t chainHash) {
-  assert(NLIMBS == 4 * 2);
+  //assert(NLIMBS == 4 * 2);
 
   // The value x is 8 words long (8*32 bits in total)
   // We build (MSB to LSB) as  [ chainHash ; roundSalt ; roundId ; index ]

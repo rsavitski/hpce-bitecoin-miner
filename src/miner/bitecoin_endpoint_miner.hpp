@@ -61,7 +61,7 @@ class EndpointMiner : public EndpointClient
             adjustment for clock skew, and the safety margin
     */
 
-    tSafetyMargin += 0.3; // from binning //TODO
+    tSafetyMargin += 0.3;  // from binning //TODO
 
     double tFinish =
         request->timeStampReceiveBids * 1e-9 + skewEstimate - tSafetyMargin;
@@ -81,11 +81,13 @@ class EndpointMiner : public EndpointClient
     previousChainSize = roundInfo->chainData.size();
 
     // std::vector<uint32_t> bestSolution(roundInfo->maxIndices);
-    std::vector<uint32_t> bestSolution(2u);
-    const unsigned BIN_SIZE = 10000;
-    uint32_t indx[2][BIN_SIZE];
-    bigint_t hashes[2][BIN_SIZE];
+    std::vector<uint32_t> bestSolution(3u);
+    const unsigned BIN_SIZE = 465;
+    uint32_t indx[3][BIN_SIZE];
+    bigint_t hashes[3][BIN_SIZE];
 
+    double temp_time = 0;
+    double t1 = now() * 1e-9;
 
     unsigned nTrials = 0;
     while (1) {
@@ -94,48 +96,58 @@ class EndpointMiner : public EndpointClient
       Log(Log_Debug, "Trial %d.", nTrials);
 
       for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[0][i]= rand()&0x7fffffff;
+        indx[0][i] = rand() & 0x3fffffff;
         hashes[0][i] = PoolHashMiner(roundInfo.get(), indx[0][i], chainHash);
       }
       for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[1][i]= (1<<31) | (rand()&0x7fffffff);
+        indx[1][i] = (1 << 30) | (rand() & 0x3fffffff);
         hashes[1][i] = PoolHashMiner(roundInfo.get(), indx[1][i], chainHash);
       }
+      for (unsigned i = 0; i < BIN_SIZE; ++i) {
+        indx[2][i] = (1 << 31) | (rand() & 0x3fffffff);
+        hashes[2][i] = PoolHashMiner(roundInfo.get(), indx[2][i], chainHash);
+      }
 
+      // TODO: consider trying 1-tuples as well
 
       for (unsigned i = 0; i < BIN_SIZE; ++i) {
         for (unsigned j = 0; j < BIN_SIZE; ++j) {
-          bigint_t proof;
-          wide_xor(8, proof.limbs, hashes[0][i].limbs, hashes[1][j].limbs);
-          if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0) {
-            bestProof = proof;
-            bestSolution[0] = indx[0][i];
-            bestSolution[1] = indx[1][j];
+          bigint_t ij_acc;
+          wide_xor(8, ij_acc.limbs, hashes[0][i].limbs, hashes[1][j].limbs);
+           // for (unsigned p = 0; p < 8; ++p) {
+           //   ij_acc.limbs[p] = hashes[0][i].limbs[p] ^ hashes[1][j].limbs[p];
+           // }
+          for (unsigned k = 0; k < BIN_SIZE; ++k) {
+            bigint_t proof;
+            //          wide_xor(8, proof.limbs, ij_acc.limbs,
+            // hashes[2][k].limbs);
+            for (unsigned p = 0; p < 8; ++p) {
+              proof.limbs[p] = ij_acc.limbs[p] ^ hashes[2][k].limbs[p];
+            }
+            if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0) {
+              bestProof = proof;
+              bestSolution[0] = indx[0][i];
+              bestSolution[1] = indx[1][j];
+              bestSolution[2] = indx[2][k];
+            }
           }
         }
       }
-
-      // double score = wide_as_double(BIGINT_WORDS, proof.limbs);
-      ////Log(Log_Debug, "    Score=%lg", score);
-
-      // if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0) {
-      //  double worst =
-      //      pow(2.0, BIGINT_LENGTH * 8);  // This is the worst possible score
-      //  Log(Log_Verbose,
-      //      "    Found new best, nTrials=%d, score=%lg, ratio=%lg.", nTrials,
-      //      score, worst / score);
-      //  bestSolution = indices;
-      //  bestProof = proof;
-      //}
 
       double t = now() * 1e-9;  // Work out where we are against the deadline
       double timeBudget = tFinish - t;
       Log(Log_Debug, "Finish trial %d, time remaining =%lg seconds.", nTrials,
           timeBudget);
+      Log(Log_Debug, "time taken for %u: %lf", BIN_SIZE, t - temp_time);
+      temp_time = t;
 
       if (timeBudget <= 0)
         break;  // We have run out of time, send what we have
     }
+    Log(Log_Info, "nTrials: %u", nTrials);
+    double t2 = now() * 1e-9;
+    Log(Log_Info, "Effective hashrate: %lf",
+        ((double)nTrials * BIN_SIZE * BIN_SIZE * BIN_SIZE) / (t2 - t1));
 
     solution = bestSolution;
     wide_copy(BIGINT_WORDS, pProof, bestProof.limbs);
