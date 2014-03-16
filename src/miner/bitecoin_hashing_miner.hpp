@@ -101,34 +101,6 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
   return x;
 }
 
-// This is the complete hash reference function. Given the current round
-// parameters,
-// and the solution, which is a vector of indices, it calculates the proof. The
-// goodness
-// of the solution is determined by the numerical value of the proof.
-bigint_t HashMiner(const Packet_ServerBeginRound *pParams, unsigned nIndices,
-                   const uint32_t *pIndices) {
-  if (nIndices > pParams->maxIndices)
-    throw std::invalid_argument(
-        "HashMiner - Too many indices for parameter set.");
-  static size_t previousChainSize = 0;
-  uint64_t chainHash = fnvIterative::getInstance()(
-      (const char *)&pParams->chainData[previousChainSize],
-      pParams->chainData.size() - previousChainSize);
-  previousChainSize = pParams->chainData.size();
-
-  bigint_t acc;
-
-  for (unsigned i = 0; i < nIndices; i++) {
-    // Calculate the hash for this specific point
-    bigint_t point = PoolHashMiner(pParams, pIndices[i], chainHash);
-
-    // Combine the hashes of the points together using xor
-    wide_xor(8, acc.limbs, acc.limbs, point.limbs);
-  }
-
-  return acc;
-}
 };
 
 #endif

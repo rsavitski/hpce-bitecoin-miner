@@ -72,6 +72,12 @@ class EndpointMiner : public EndpointClient
     bigint_t bestProof;
     wide_ones(BIGINT_WORDS, bestProof.limbs);
 
+    static size_t previousChainSize = 0;
+    uint64_t chainHash = fnvIterative::getInstance()(
+        (const char *)&roundInfo->chainData[previousChainSize],
+        roundInfo->chainData.size() - previousChainSize);
+    previousChainSize = roundInfo->chainData.size();
+
     // do only 2 indices
     uint32_t capped_num = std::min(roundInfo->maxIndices, 2u);
     std::vector<uint32_t> indices(capped_num);
@@ -84,21 +90,25 @@ class EndpointMiner : public EndpointClient
 
       Log(Log_Debug, "Trial %d.", nTrials);
 
-      //TODO: why +1 to both terrible? salt being zero? c being ffff?
+      // TODO: why +1 to both terrible? salt being zero? c being ffff?
       indices[0] += 1 + (rand() % 10);
-      //indices[1] = indices[0] + 1 + (rand() % 10);
+      // indices[1] = indices[0] + 1 + (rand() % 10);
       indices[1] = 0xffffffff - indices[0];
 
-      // std::vector<uint32_t> indices(roundInfo->maxIndices);
-      // uint32_t curr = 0;
-      // for (unsigned j = 0; j < indices.size(); j++) {
-      //  curr = curr + 1 + (rand() % 10);
-      //  indices[j] = curr;
-      //}
+      bigint_t acc;
+      for (unsigned i = 0; i < indices.size(); i++) {
+        // Calculate the hash for this specific point
+        bigint_t point = PoolHashMiner(roundInfo.get(), indices[i], chainHash);
 
-      bigint_t proof = HashMiner(roundInfo.get(), indices.size(), &indices[0]);
+        // Combine the hashes of the points together using xor
+        wide_xor(8, acc.limbs, acc.limbs, point.limbs);
+      }
+      bigint_t proof = acc;
+
+      // bigint_t proof = HashMiner(roundInfo.get(), indices.size(),
+      // &indices[0]);
       double score = wide_as_double(BIGINT_WORDS, proof.limbs);
-      Log(Log_Debug, "    Score=%lg", score);
+      //Log(Log_Debug, "    Score=%lg", score);
 
       if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0) {
         double worst =
