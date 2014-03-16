@@ -90,23 +90,26 @@ class EndpointMiner : public EndpointClient
     double t1 = now() * 1e-9;
 
     unsigned nTrials = 0;
+
+    unsigned retained = 0;
     while (1) {
       ++nTrials;
 
       Log(Log_Debug, "Trial %d.", nTrials);
 
       for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[0][i] = rand() & 0x3fffffff;
+        indx[0][i] = (retained + i) & 0x3fffffff;
         hashes[0][i] = PoolHashMiner(roundInfo.get(), indx[0][i], chainHash);
       }
       for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[1][i] = (1 << 30) | (rand() & 0x3fffffff);
+        indx[1][i] = (1 << 30) | ((retained + i) & 0x3fffffff);
         hashes[1][i] = PoolHashMiner(roundInfo.get(), indx[1][i], chainHash);
       }
       for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[2][i] = (1 << 31) | (rand() & 0x3fffffff);
+        indx[2][i] = (1 << 31) | ((retained+i) & 0x3fffffff);
         hashes[2][i] = PoolHashMiner(roundInfo.get(), indx[2][i], chainHash);
       }
+      retained += BIN_SIZE;
 
       // TODO: consider trying 1-tuples as well
 
@@ -114,9 +117,9 @@ class EndpointMiner : public EndpointClient
         for (unsigned j = 0; j < BIN_SIZE; ++j) {
           bigint_t ij_acc;
           wide_xor(8, ij_acc.limbs, hashes[0][i].limbs, hashes[1][j].limbs);
-           // for (unsigned p = 0; p < 8; ++p) {
-           //   ij_acc.limbs[p] = hashes[0][i].limbs[p] ^ hashes[1][j].limbs[p];
-           // }
+          // for (unsigned p = 0; p < 8; ++p) {
+          //   ij_acc.limbs[p] = hashes[0][i].limbs[p] ^ hashes[1][j].limbs[p];
+          // }
           for (unsigned k = 0; k < BIN_SIZE; ++k) {
             bigint_t proof;
             //          wide_xor(8, proof.limbs, ij_acc.limbs,
