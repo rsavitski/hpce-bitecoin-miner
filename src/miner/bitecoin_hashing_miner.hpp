@@ -15,10 +15,13 @@
 
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_hashing.hpp"
+#include <stdio.h>
 
-namespace bitecoin {
+namespace bitecoin
+{
 
-class fnvIterative {
+class fnvIterative
+{
   static const uint64_t FNV_64_PRIME = 0x100000001b3ULL;
   uint64_t m_offset;
 
@@ -26,8 +29,9 @@ class fnvIterative {
   fnvIterative(fnvIterative const &);
   void operator=(fnvIterative const &);
 
-public:
-  static fnvIterative &getInstance() {
+ public:
+  static fnvIterative &getInstance()
+  {
     static fnvIterative instance;
     return instance;
   }
@@ -36,11 +40,13 @@ public:
   void reset() { offset(INIT); }
   void offset(uint64_t init = INIT) { m_offset = init; }
 
-  uint64_t operator()(const std::string &_buf) {
+  uint64_t operator()(const std::string &_buf)
+  {
     return operator()(_buf.c_str(), _buf.length());
   }
 
-  uint64_t operator()(const char *_buf, size_t _len) {
+  uint64_t operator()(const char *_buf, size_t _len)
+  {
     const unsigned char *bp =
         reinterpret_cast<const unsigned char *>(_buf); /* start of buffer */
     const unsigned char *be = bp + _len; /* beyond end of buffer */
@@ -74,8 +80,9 @@ public:
 // Multiple hashes of different indices will be combined to produce the overall
 // result.
 bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
-                       uint64_t chainHash) {
-  //assert(NLIMBS == 4 * 2);
+                       uint64_t chainHash)
+{
+  // assert(NLIMBS == 4 * 2);
 
   // The value x is 8 words long (8*32 bits in total)
   // We build (MSB to LSB) as  [ chainHash ; roundSalt ; roundId ; index ]
@@ -88,6 +95,13 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
   x.limbs[6] = (uint32_t)(chainHash & 0xFFFFFFFFULL);
   x.limbs[7] = (uint32_t)(chainHash & 0xFFFFFFFFULL);
 
+  fprintf(stderr, "\n");
+  fprintf(stderr, "BEGINNING HASH\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "INI ::: %8x %8x %8x %8x %8x %8x %8x %8x\n", x.limbs[7],
+          x.limbs[6], x.limbs[5], x.limbs[4], x.limbs[3], x.limbs[2],
+          x.limbs[1], x.limbs[0]);
+
   // Now step forward by the number specified by the server
   for (unsigned j = 0; j < pParams->hashSteps; j++) {
     bigint_t tmp;
@@ -97,10 +111,12 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
     uint32_t carry = wide_add(4, x.limbs, tmp.limbs, x.limbs + 4);
     // hi(x) = hi(tmp) + carry
     wide_add(4, x.limbs + 4, tmp.limbs + 4, carry);
+  fprintf(stderr, "%3d ::: %8x %8x %8x %8x %8x %8x %8x %8x\n", j, x.limbs[7],
+          x.limbs[6], x.limbs[5], x.limbs[4], x.limbs[3], x.limbs[2],
+          x.limbs[1], x.limbs[0]);
   }
   return x;
 }
-
 };
 
 #endif

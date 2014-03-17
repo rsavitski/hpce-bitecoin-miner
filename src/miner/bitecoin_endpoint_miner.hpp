@@ -85,7 +85,7 @@ class EndpointMiner : public EndpointClient
 
     // std::vector<uint32_t> bestSolution(roundInfo->maxIndices);
     std::vector<uint32_t> bestSolution(2u);
-    const unsigned BIN_SIZE = 10000;
+    const unsigned BIN_SIZE = 1;
     uint32_t indx[3][BIN_SIZE];
     bigint_t hashes[3][BIN_SIZE];
 
@@ -94,18 +94,16 @@ class EndpointMiner : public EndpointClient
 
     unsigned nTrials = 0;
 
-    //unsigned retained = 0;
+    // unsigned retained = 0;
     while (1) {
       ++nTrials;
 
       Log(Log_Debug, "Trial %d.", nTrials);
 
       for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[0][i] = (rand()) & 0x7fffffff;
+        indx[0][i] = i;
         hashes[0][i] = PoolHashMiner(roundInfo.get(), indx[0][i], chainHash);
-      }
-      for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[1][i] = (1 << 31) | ((rand()) & 0x7fffffff);
+        indx[1][i] = i + 0x94632009;//0xf233c9d;
         hashes[1][i] = PoolHashMiner(roundInfo.get(), indx[1][i], chainHash);
       }
       // for (unsigned i = 0; i < BIN_SIZE; ++i) {
@@ -148,20 +146,36 @@ class EndpointMiner : public EndpointClient
       //      }
       //    }
       //  }
-      //}
-      for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        for (unsigned j = 0; j < BIN_SIZE; ++j) {
-          bigint_t ij_acc;
-          wide_xor(8, ij_acc.limbs, hashes[0][i].limbs, hashes[1][j].limbs);
-          bigint_t proof = ij_acc;
-          if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0) {
-            bestProof = proof;
-            bestSolution[0] = indx[0][i];
-            bestSolution[1] = indx[1][j];
-            // bestSolution[2] = indx[2][k];
+      //}o
+
+      for (unsigned i = 0; i < 1/*BIN_SIZE*/; ++i) {
+          bigint_t bestProof;
+          wide_xor(8, bestProof.limbs, hashes[0][i].limbs, hashes[1][i].limbs);
+          Log(Log_Fatal, "--------------");
+          Log(Log_Fatal, "ind[0]: %8x", indx[0][i]);
+          Log(Log_Fatal, "ind[1]: %8x", indx[1][i]);
+          Log(Log_Fatal, "sub   : %8x", indx[1][i] - indx[0][i]);
+          for (int z = 6; z < 8; ++z) {
+            Log(Log_Fatal, "proof[%d]: %8x", z, bestProof.limbs[z]);
           }
-        }
+          Log(Log_Fatal, "best proof: %lg",
+              wide_as_double(BIGINT_WORDS, bestProof.limbs));
       }
+      while(1);
+
+      // for (unsigned i = 0; i < BIN_SIZE; ++i) {
+      //  for (unsigned j = 0; j < BIN_SIZE; ++j) {
+      //    bigint_t ij_acc;
+      //    wide_xor(8, ij_acc.limbs, hashes[0][i].limbs, hashes[1][j].limbs);
+      //    bigint_t proof = ij_acc;
+      //    if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0) {
+      //      bestProof = proof;
+      //      bestSolution[0] = indx[0][i];
+      //      bestSolution[1] = indx[1][j];
+      //      // bestSolution[2] = indx[2][k];
+      //    }
+      //  }
+      //}
 
       double t = now() * 1e-9;  // Work out where we are against the deadline
       double timeBudget = tFinish - t;
@@ -174,10 +188,8 @@ class EndpointMiner : public EndpointClient
         break;  // We have run out of time, send what we have
     }
 
-
-
-    for (int z=0; z<8; ++z){
-    Log(Log_Fatal, "proof[%d]: %8x",z, bestProof.limbs[z]);
+    for (int z = 0; z < 8; ++z) {
+      Log(Log_Fatal, "proof[%d]: %8x", z, bestProof.limbs[z]);
     }
     Log(Log_Fatal, "best proof: %lg",
         wide_as_double(BIGINT_WORDS, bestProof.limbs));

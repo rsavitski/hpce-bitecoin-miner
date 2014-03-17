@@ -73,7 +73,8 @@ public:
 
         auto beginRound = std::make_shared<Packet_ServerBeginRound>();
         beginRound->roundId = roundId;
-        beginRound->roundSalt = rand();
+        //beginRound->roundSalt = rand();
+        beginRound->roundSalt = 0;
         beginRound->chainData.resize(16 + (rand() % 1000));
         beginRound->maxIndices = 16;
         memset(beginRound->c, 0, BIGINT_LENGTH / 2);
@@ -84,11 +85,15 @@ public:
         //beginRound->c[2] = 3418534911;
         //beginRound->c[3] = 2138916474;
 
-        beginRound->c[0] = 4294964621;
-        beginRound->c[1] = 4294967295;
-        beginRound->c[2] = 3418534911;
-        beginRound->c[3] = 2138916474;
+        //beginRound->c[0] = 0xfa;
+        //beginRound->c[1] = 0xbb;
+        //beginRound->c[2] = 0x2378;
+        //beginRound->c[3] = 0x0347;
 
+        beginRound->c[3] =0x7f7d467a;
+        beginRound->c[2] =0xcbc2b3ff;
+        beginRound->c[1] =0xffffffff;
+        beginRound->c[0] =0xfffff58d;
 
         // Again exchange might choose differently
         //beginRound->hashSteps = 16 + rand() % 16;
@@ -103,7 +108,7 @@ public:
         //roundLength = -log(roundLength) * 2.75 + 0.25;
         //roundLength = std::max(0.25, std::min(60.0, roundLength));
         
-        double roundLength = 30.0;
+        double roundLength = 20.0;
 
         timestamp_t start = now();
         timestamp_t finish = uint64_t(start + roundLength * 1e9);
