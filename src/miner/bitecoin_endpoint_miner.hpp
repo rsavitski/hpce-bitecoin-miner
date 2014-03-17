@@ -74,11 +74,14 @@ class EndpointMiner : public EndpointClient
     bigint_t bestProof;
     wide_ones(BIGINT_WORDS, bestProof.limbs);
 
-    static size_t previousChainSize = 0;
-    uint64_t chainHash = fnvIterative::getInstance()(
-        (const char *)&roundInfo->chainData[previousChainSize],
-        roundInfo->chainData.size() - previousChainSize);
-    previousChainSize = roundInfo->chainData.size();
+    //    static size_t previousChainSize = 0;
+    //    uint64_t chainHash = fnvIterative::getInstance()(
+    //        (const char *)&roundInfo->chainData[previousChainSize],
+    //        roundInfo->chainData.size() - previousChainSize);
+    //    previousChainSize = roundInfo->chainData.size();
+    hash::fnv<64> hasher;
+    uint64_t chainHash =
+        hasher((const char *)&roundInfo->chainData[0], roundInfo->chainData.size());
 
     // std::vector<uint32_t> bestSolution(roundInfo->maxIndices);
     std::vector<uint32_t> bestSolution(3u);
@@ -106,7 +109,7 @@ class EndpointMiner : public EndpointClient
         hashes[1][i] = PoolHashMiner(roundInfo.get(), indx[1][i], chainHash);
       }
       for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[2][i] = (1 << 31) | ((retained+i) & 0x3fffffff);
+        indx[2][i] = (1 << 31) | ((retained + i) & 0x3fffffff);
         hashes[2][i] = PoolHashMiner(roundInfo.get(), indx[2][i], chainHash);
       }
       retained += BIN_SIZE;
