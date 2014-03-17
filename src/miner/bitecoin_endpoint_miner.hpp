@@ -80,12 +80,12 @@ class EndpointMiner : public EndpointClient
     //        roundInfo->chainData.size() - previousChainSize);
     //    previousChainSize = roundInfo->chainData.size();
     hash::fnv<64> hasher;
-    uint64_t chainHash =
-        hasher((const char *)&roundInfo->chainData[0], roundInfo->chainData.size());
+    uint64_t chainHash = hasher((const char *)&roundInfo->chainData[0],
+                                roundInfo->chainData.size());
 
     // std::vector<uint32_t> bestSolution(roundInfo->maxIndices);
-    std::vector<uint32_t> bestSolution(3u);
-    const unsigned BIN_SIZE = 465;
+    std::vector<uint32_t> bestSolution(2u);
+    const unsigned BIN_SIZE = 10000;
     uint32_t indx[3][BIN_SIZE];
     bigint_t hashes[3][BIN_SIZE];
 
@@ -94,48 +94,71 @@ class EndpointMiner : public EndpointClient
 
     unsigned nTrials = 0;
 
-    unsigned retained = 0;
+    //unsigned retained = 0;
     while (1) {
       ++nTrials;
 
       Log(Log_Debug, "Trial %d.", nTrials);
 
       for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[0][i] = (retained + i) & 0x3fffffff;
+        indx[0][i] = (rand()) & 0x7fffffff;
         hashes[0][i] = PoolHashMiner(roundInfo.get(), indx[0][i], chainHash);
       }
       for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[1][i] = (1 << 30) | ((retained + i) & 0x3fffffff);
+        indx[1][i] = (1 << 31) | ((rand()) & 0x7fffffff);
         hashes[1][i] = PoolHashMiner(roundInfo.get(), indx[1][i], chainHash);
       }
-      for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[2][i] = (1 << 31) | ((retained + i) & 0x3fffffff);
-        hashes[2][i] = PoolHashMiner(roundInfo.get(), indx[2][i], chainHash);
-      }
-      retained += BIN_SIZE;
+      // for (unsigned i = 0; i < BIN_SIZE; ++i) {
+      //  indx[0][i] = (retained + i) & 0x3fffffff;
+      //  hashes[0][i] = PoolHashMiner(roundInfo.get(), indx[0][i], chainHash);
+      //}
+      // for (unsigned i = 0; i < BIN_SIZE; ++i) {
+      //  indx[1][i] = (1 << 30) | ((retained + i) & 0x3fffffff);
+      //  hashes[1][i] = PoolHashMiner(roundInfo.get(), indx[1][i], chainHash);
+      //}
+      // for (unsigned i = 0; i < BIN_SIZE; ++i) {
+      //  indx[2][i] = (1 << 31) | ((retained + i) & 0x3fffffff);
+      //  hashes[2][i] = PoolHashMiner(roundInfo.get(), indx[2][i], chainHash);
+      //}
+      // retained += BIN_SIZE;
 
-      // TODO: consider trying 1-tuples as well
+      //// TODO: consider trying 1-tuples as well
 
+      // for (unsigned i = 0; i < BIN_SIZE; ++i) {
+      //  for (unsigned j = 0; j < BIN_SIZE; ++j) {
+      //    bigint_t ij_acc;
+      //    wide_xor(8, ij_acc.limbs, hashes[0][i].limbs, hashes[1][j].limbs);
+      //    // for (unsigned p = 0; p < 8; ++p) {
+      //    //   ij_acc.limbs[p] = hashes[0][i].limbs[p] ^
+      // hashes[1][j].limbs[p];
+      //    // }
+      //    for (unsigned k = 0; k < BIN_SIZE; ++k) {
+      //      bigint_t proof;
+      //      //          wide_xor(8, proof.limbs, ij_acc.limbs,
+      //      // hashes[2][k].limbs);
+      //      for (unsigned p = 0; p < 8; ++p) {
+      //        proof.limbs[p] = ij_acc.limbs[p] ^ hashes[2][k].limbs[p];
+      //      }
+      //      if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0)
+      // {
+      //        bestProof = proof;
+      //        bestSolution[0] = indx[0][i];
+      //        bestSolution[1] = indx[1][j];
+      //        bestSolution[2] = indx[2][k];
+      //      }
+      //    }
+      //  }
+      //}
       for (unsigned i = 0; i < BIN_SIZE; ++i) {
         for (unsigned j = 0; j < BIN_SIZE; ++j) {
           bigint_t ij_acc;
           wide_xor(8, ij_acc.limbs, hashes[0][i].limbs, hashes[1][j].limbs);
-          // for (unsigned p = 0; p < 8; ++p) {
-          //   ij_acc.limbs[p] = hashes[0][i].limbs[p] ^ hashes[1][j].limbs[p];
-          // }
-          for (unsigned k = 0; k < BIN_SIZE; ++k) {
-            bigint_t proof;
-            //          wide_xor(8, proof.limbs, ij_acc.limbs,
-            // hashes[2][k].limbs);
-            for (unsigned p = 0; p < 8; ++p) {
-              proof.limbs[p] = ij_acc.limbs[p] ^ hashes[2][k].limbs[p];
-            }
-            if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0) {
-              bestProof = proof;
-              bestSolution[0] = indx[0][i];
-              bestSolution[1] = indx[1][j];
-              bestSolution[2] = indx[2][k];
-            }
+          bigint_t proof = ij_acc;
+          if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0) {
+            bestProof = proof;
+            bestSolution[0] = indx[0][i];
+            bestSolution[1] = indx[1][j];
+            // bestSolution[2] = indx[2][k];
           }
         }
       }
@@ -150,6 +173,18 @@ class EndpointMiner : public EndpointClient
       if (timeBudget <= 0)
         break;  // We have run out of time, send what we have
     }
+
+
+
+    for (int z=0; z<8; ++z){
+    Log(Log_Fatal, "proof[%d]: %8x",z, bestProof.limbs[z]);
+    }
+    Log(Log_Fatal, "best proof: %lg",
+        wide_as_double(BIGINT_WORDS, bestProof.limbs));
+    Log(Log_Fatal, "ind[0]: %8x", bestSolution[0]);
+    Log(Log_Fatal, "ind[1]: %8x", bestSolution[1]);
+    Log(Log_Fatal, "sub   : %8x", bestSolution[1] - bestSolution[0]);
+
     Log(Log_Info, "nTrials: %u", nTrials);
     double t2 = now() * 1e-9;
     Log(Log_Info, "Effective hashrate: %lf",

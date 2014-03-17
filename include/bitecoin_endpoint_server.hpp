@@ -79,21 +79,31 @@ public:
         memset(beginRound->c, 0, BIGINT_LENGTH / 2);
         // These are just arbitrary values. The real exchange may choose
         // different ones
+        //beginRound->c[0] = 4294964621;
+        //beginRound->c[1] = 4294967295;
+        //beginRound->c[2] = 3418534911;
+        //beginRound->c[3] = 2138916474;
+
         beginRound->c[0] = 4294964621;
         beginRound->c[1] = 4294967295;
         beginRound->c[2] = 3418534911;
         beginRound->c[3] = 2138916474;
+
+
         // Again exchange might choose differently
-        beginRound->hashSteps = 16 + rand() % 16;
+        //beginRound->hashSteps = 16 + rand() % 16;
+        beginRound->hashSteps = 23;
 
         Log(Log_Verbose, "Sending chain data.\n");
         SendPacket(beginRound);
 
         auto requestBid = std::make_shared<Packet_ServerRequestBid>();
 
-        double roundLength = (rand() + 1.0) / RAND_MAX;
-        roundLength = -log(roundLength) * 2.75 + 0.25;
-        roundLength = std::max(0.25, std::min(60.0, roundLength));
+        //double roundLength = (rand() + 1.0) / RAND_MAX;
+        //roundLength = -log(roundLength) * 2.75 + 0.25;
+        //roundLength = std::max(0.25, std::min(60.0, roundLength));
+        
+        double roundLength = 30.0;
 
         timestamp_t start = now();
         timestamp_t finish = uint64_t(start + roundLength * 1e9);
