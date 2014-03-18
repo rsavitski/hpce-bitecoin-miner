@@ -85,9 +85,9 @@ class EndpointMiner : public EndpointClient
 
     // std::vector<uint32_t> bestSolution(roundInfo->maxIndices);
     std::vector<uint32_t> bestSolution(2u);
-    const unsigned BIN_SIZE = 10;
-    uint32_t indx[3][BIN_SIZE];
-    bigint_t hashes[3][BIN_SIZE];
+    const unsigned BIN_SIZE = 0xFFFFffff - 0x94632009;//100;//1<<32;
+    //uint32_t indx[3][BIN_SIZE];
+    //bigint_t hashes[3][BIN_SIZE];
 
     double temp_time = 0;
     double t1 = now() * 1e-9;
@@ -107,86 +107,51 @@ class EndpointMiner : public EndpointClient
       //  hashes[1][i] = PoolHashMiner(roundInfo.get(), indx[1][i], chainHash);
       //}
 
-      for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[0][i] = 0xffffffff -6 - 0x94632009 + i;
-        hashes[0][i] = PoolHashMiner(roundInfo.get(), indx[0][i], chainHash);
-        indx[1][i] = indx[0][i] + 0x94632009;//0x5178c98e;//0x94632009;//0xf233c9d;
-        hashes[1][i] = PoolHashMiner(roundInfo.get(), indx[1][i], chainHash);
-      }
-
-
-      // for (unsigned i = 0; i < BIN_SIZE; ++i) {
-      //  indx[0][i] = (retained + i) & 0x3fffffff;
+      //for (unsigned i = 0; i < BIN_SIZE; ++i) {
+      //  indx[0][i] = i;
       //  hashes[0][i] = PoolHashMiner(roundInfo.get(), indx[0][i], chainHash);
-      //}
-      // for (unsigned i = 0; i < BIN_SIZE; ++i) {
-      //  indx[1][i] = (1 << 30) | ((retained + i) & 0x3fffffff);
+      //  indx[1][i] = indx[0][i] + 0x94632009;//0x5178c98e;//0x94632009;//0xf233c9d;
       //  hashes[1][i] = PoolHashMiner(roundInfo.get(), indx[1][i], chainHash);
       //}
-      // for (unsigned i = 0; i < BIN_SIZE; ++i) {
-      //  indx[2][i] = (1 << 31) | ((retained + i) & 0x3fffffff);
-      //  hashes[2][i] = PoolHashMiner(roundInfo.get(), indx[2][i], chainHash);
-      //}
-      // retained += BIN_SIZE;
 
-      //// TODO: consider trying 1-tuples as well
+      uint32_t bitcounts[32] = {0};
 
-      // for (unsigned i = 0; i < BIN_SIZE; ++i) {
-      //  for (unsigned j = 0; j < BIN_SIZE; ++j) {
-      //    bigint_t ij_acc;
-      //    wide_xor(8, ij_acc.limbs, hashes[0][i].limbs, hashes[1][j].limbs);
-      //    // for (unsigned p = 0; p < 8; ++p) {
-      //    //   ij_acc.limbs[p] = hashes[0][i].limbs[p] ^
-      // hashes[1][j].limbs[p];
-      //    // }
-      //    for (unsigned k = 0; k < BIN_SIZE; ++k) {
-      //      bigint_t proof;
-      //      //          wide_xor(8, proof.limbs, ij_acc.limbs,
-      //      // hashes[2][k].limbs);
-      //      for (unsigned p = 0; p < 8; ++p) {
-      //        proof.limbs[p] = ij_acc.limbs[p] ^ hashes[2][k].limbs[p];
-      //      }
-      //      if (wide_compare(BIGINT_WORDS, proof.limbs, bestProof.limbs) < 0)
-      // {
-      //        bestProof = proof;
-      //        bestSolution[0] = indx[0][i];
-      //        bestSolution[1] = indx[1][j];
-      //        bestSolution[2] = indx[2][k];
-      //      }
-      //    }
-      //  }
-      //}o
 
-      for (unsigned i = 0; i < BIN_SIZE; ++i) {
+      for (unsigned i = 0; i < 1<<24/*BIN_SIZE*/; ++i) {
+        
+        uint32_t indx1 = i;
+        bigint_t hash1  = PoolHashMiner(roundInfo.get(), indx1, chainHash);
+        uint32_t indx2 = i+0x94632009;;
+        bigint_t hash2  = PoolHashMiner(roundInfo.get(), indx2, chainHash);
+        
+        
           bigint_t bestProof;
-          wide_xor(8, bestProof.limbs, hashes[0][i].limbs, hashes[1][i].limbs);
+          wide_xor(8, bestProof.limbs, hash1.limbs, hash2.limbs);
 
 
+          uint32_t v = bestProof.limbs[7];
+          unsigned int c; // c accumulates the total bits set in v
+          for (c = 0; v; c++)
+          {
+              v &= v - 1; // clear the least significant bit set
+          }
+          bitcounts[c]++;
+          //fprintf(stderr, "val: %8x", bestProof.limbs[7]);
+          //fprintf(stderr, "BITS SET: %u\n", c);
+          //continue;
 
-          bigint_t diff;
-          wide_sub(8, diff.limbs, hashes[0][i].limbs, hashes[1][i].limbs);
-            fprintf( stderr, "%6i ::: ", i);
-          for (int z=7; z>=0; --z)
-            fprintf(stderr, "%8x ", diff.limbs[z]);
-            fprintf(stderr, "\n");
-          //if (bestProof.limbs[7] != 0)
-            //fprintf( stderr, "%6i ::: %8x %8x\n", i, bestProof.limbs[7], bestProof.limbs[6]);
+          if (i%10000 == 0)
+            fprintf(stderr, "%d\n", i);
 
-            //fprintf( stderr, "%6i ::: %8x %8x %8x\n", i, hashes[1][i].limbs[7]-hashes[0][i].limbs[7]
-            //,
-            //hashes[1][i].limbs[6]-hashes[0][i].limbs[6],
-            //hashes[1][i].limbs[5]-hashes[0][i].limbs[5]
-            //);
-
-          //Log(Log_Fatal, "--------------");
-          //Log(Log_Fatal, "ind[0]: %8x", indx[0][i]);
-          //Log(Log_Fatal, "ind[1]: %8x", indx[1][i]);
-          //Log(Log_Fatal, "sub   : %8x", indx[1][i] - indx[0][i]);
-          //for (int z = 6; z < 8; ++z) {
-          //  Log(Log_Fatal, "proof[%d]: %8x", z, bestProof.limbs[z]);
-          //}
-          //Log(Log_Fatal, "best proof: %lg",
-          //    wide_as_double(BIGINT_WORDS, bestProof.limbs));
+          //bigint_t diff;
+          //wide_sub(8, diff.limbs, hashes[0][i].limbs, hashes[1][i].limbs);
+          //  fprintf( stderr, "%6i ::: ", i);
+          //for (int z=7; z>=0; --z)
+          //  fprintf(stderr, "%8x ", diff.limbs[z]);
+          //  fprintf(stderr, "\n");
+      }
+      for (int i=0; i<32; ++i){
+        fprintf(stderr, "bin[%2d]: 0x%X\n", i,bitcounts[i]);
       }
 
       while(1);
