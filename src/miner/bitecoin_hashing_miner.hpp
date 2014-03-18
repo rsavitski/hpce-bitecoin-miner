@@ -95,12 +95,12 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
   x.limbs[6] = (uint32_t)(chainHash & 0xFFFFFFFFULL);
   x.limbs[7] = (uint32_t)(chainHash & 0xFFFFFFFFULL);
 
-  fprintf(stderr, "\n");
-  fprintf(stderr, "BEGINNING HASH\n");
-  fprintf(stderr, "\n");
-  fprintf(stderr, "INI ::: %8x %8x %8x %8x %8x %8x %8x %8x\n", x.limbs[7],
-          x.limbs[6], x.limbs[5], x.limbs[4], x.limbs[3], x.limbs[2],
-          x.limbs[1], x.limbs[0]);
+  //fprintf(stderr, "\n");
+  //fprintf(stderr, "BEGINNING HASH\n");
+  //fprintf(stderr, "\n");
+  //fprintf(stderr, "INI ::: %8x %8x %8x %8x %8x %8x %8x %8x\n", x.limbs[7],
+  //        x.limbs[6], x.limbs[5], x.limbs[4], x.limbs[3], x.limbs[2],
+  //        x.limbs[1], x.limbs[0]);
 
   // Now step forward by the number specified by the server
   for (unsigned j = 0; j < pParams->hashSteps; j++) {
@@ -111,9 +111,9 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
     uint32_t carry = wide_add(4, x.limbs, tmp.limbs, x.limbs + 4);
     // hi(x) = hi(tmp) + carry
     wide_add(4, x.limbs + 4, tmp.limbs + 4, carry);
-  fprintf(stderr, "%3d ::: %8x %8x %8x %8x %8x %8x %8x %8x\n", j, x.limbs[7],
-          x.limbs[6], x.limbs[5], x.limbs[4], x.limbs[3], x.limbs[2],
-          x.limbs[1], x.limbs[0]);
+  //fprintf(stderr, "%3d ::: %8x %8x %8x %8x %8x %8x %8x %8x\n", j, x.limbs[7],
+  //        x.limbs[6], x.limbs[5], x.limbs[4], x.limbs[3], x.limbs[2],
+  //        x.limbs[1], x.limbs[0]);
   }
   return x;
 }

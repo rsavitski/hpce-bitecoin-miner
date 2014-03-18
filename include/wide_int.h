@@ -15,7 +15,21 @@
                 a==b :  0
                 a>b : +1
 */
-int wide_compare(unsigned n, const uint32_t *a, const uint32_t *b) {
+
+uint32_t wide_sub(unsigned n, uint32_t *res, const uint32_t *a,
+                  const uint32_t *b)
+{
+  uint64_t borrow = 0;
+  for (unsigned i = 0; i < n; i++) {
+    uint64_t tmp = uint64_t(a[i]) - b[i] - borrow;
+    res[i] = uint32_t(tmp & 0xFFFFFFFFULL);
+    borrow = tmp >> 63;
+  }
+  return borrow;
+}
+
+int wide_compare(unsigned n, const uint32_t *a, const uint32_t *b)
+{
   if (a == b)
     return 0;
 
@@ -29,21 +43,24 @@ int wide_compare(unsigned n, const uint32_t *a, const uint32_t *b) {
 }
 
 /*! Copy a source number to a destination */
-void wide_copy(unsigned n, uint32_t *res, const uint32_t *a) {
+void wide_copy(unsigned n, uint32_t *res, const uint32_t *a)
+{
   for (unsigned i = 0; i < n; i++) {
     res[i] = a[i];
   }
 }
 
 /*! Set entire number to zero */
-void wide_zero(unsigned n, uint32_t *res) {
+void wide_zero(unsigned n, uint32_t *res)
+{
   for (unsigned i = 0; i < n; i++) {
     res[i] = 0;
   }
 }
 
 /*! Set entire number to zero */
-void wide_ones(unsigned n, uint32_t *res) {
+void wide_ones(unsigned n, uint32_t *res)
+{
   for (unsigned i = 0; i < n; i++) {
     res[i] = 0xFFFFFFFFul;
   }
@@ -52,7 +69,8 @@ void wide_ones(unsigned n, uint32_t *res) {
 /*! Add together two n-limb numbers, returning the carry limb.
         \note the output can also be one of the inputs
 */
-void wide_xor(unsigned n, uint32_t *res, const uint32_t *a, const uint32_t *b) {
+void wide_xor(unsigned n, uint32_t *res, const uint32_t *a, const uint32_t *b)
+{
   for (unsigned i = 0; i < n; i++) {
     res[i] = a[i] ^ b[i];
   }
@@ -62,7 +80,8 @@ void wide_xor(unsigned n, uint32_t *res, const uint32_t *a, const uint32_t *b) {
         \note the output can also be one of the inputs
 */
 uint32_t wide_add(unsigned n, uint32_t *res, const uint32_t *a,
-                  const uint32_t *b) {
+                  const uint32_t *b)
+{
   uint64_t carry = 0;
   for (unsigned i = 0; i < n; i++) {
     uint64_t tmp = uint64_t(a[i]) + b[i] + carry;
@@ -75,7 +94,8 @@ uint32_t wide_add(unsigned n, uint32_t *res, const uint32_t *a,
 /*! Add a single limb to an n-limb number, returning the carry limb
 \note the output can also be the input
 */
-uint32_t wide_add(unsigned n, uint32_t *res, const uint32_t *a, uint32_t b) {
+uint32_t wide_add(unsigned n, uint32_t *res, const uint32_t *a, uint32_t b)
+{
   uint64_t carry = b;
   for (unsigned i = 0; i < n; i++) {
     uint64_t tmp = a[i] + carry;
@@ -85,7 +105,8 @@ uint32_t wide_add(unsigned n, uint32_t *res, const uint32_t *a, uint32_t b) {
   return carry;
 }
 
-uint32_t wide_add(unsigned n, uint32_t *res, const uint32_t *a, uint64_t b) {
+uint32_t wide_add(unsigned n, uint32_t *res, const uint32_t *a, uint64_t b)
+{
   assert(n >= 2);
   uint64_t acc = a[0] + (b & 0xFFFFFFFFULL);
   res[0] = uint32_t(acc & 0xFFFFFFFFULL);
@@ -107,7 +128,8 @@ uint32_t wide_add(unsigned n, uint32_t *res, const uint32_t *a, uint64_t b) {
         \note All the integers must be distinct, the output cannot overlap the
    input */
 void wide_mul(unsigned n, uint32_t *res_hi, uint32_t *res_lo, const uint32_t *a,
-              const uint32_t *b) {
+              const uint32_t *b)
+{
   assert(res_hi != a && res_hi != b);
   assert(res_lo != a && res_lo != b);
 
@@ -145,7 +167,8 @@ void wide_mul(unsigned n, uint32_t *res_hi, uint32_t *res_lo, const uint32_t *a,
 }
 
 //! Return x as a double, which is obviously lossy for large n
-double wide_as_double(unsigned n, const uint32_t *x) {
+double wide_as_double(unsigned n, const uint32_t *x)
+{
   double acc = 0;
   for (unsigned i = 0; i < n; i++) {
     acc += ldexp((double)x[i], i * 32);
