@@ -74,11 +74,17 @@ class EndpointMiner : public EndpointClient
     bigint_t bestProof;
     wide_ones(BIGINT_WORDS, bestProof.limbs);
 
-    static size_t previousChainSize = 0;
-    uint64_t chainHash = fnvIterative::getInstance()(
-        (const char *)&roundInfo->chainData[previousChainSize],
-        roundInfo->chainData.size() - previousChainSize);
-    previousChainSize = roundInfo->chainData.size();
+    // TODO: incremental hasher temporarily disabled to work with local server
+    //static size_t previousChainSize = 0;
+    //uint64_t chainHash = fnvIterative::getInstance()(
+    //    (const char *)&roundInfo->chainData[previousChainSize],
+    //    roundInfo->chainData.size() - previousChainSize);
+    //previousChainSize = roundInfo->chainData.size();
+
+
+      hash::fnv<64> hasher;
+          uint64_t chainHash = hasher((const char *)&roundInfo->chainData[0],
+                                          roundInfo->chainData.size());
 
     // std::vector<uint32_t> bestSolution(roundInfo->maxIndices);
     std::vector<uint32_t> bestSolution(3u);
