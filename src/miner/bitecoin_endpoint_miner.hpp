@@ -11,57 +11,61 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <thread>
 
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_endpoint.hpp"
 #include "bitecoin_endpoint_client.hpp"
 #include "bitecoin_hashing_miner.hpp"
 
-namespace bitecoin
-{
+namespace bitecoin {
 
-class EndpointMiner : public EndpointClient
-{
- private:
+class EndpointMiner : public EndpointClient {
+private:
   EndpointMiner(EndpointMiner &) = delete;
   void operator=(const EndpointMiner &) = delete;
 
   unsigned m_knownRounds;
   std::map<std::string, unsigned> m_knownCoins;
 
- public:
+  std::thread threadOpenCl, threadTbb;
+
+public:
   EndpointMiner(std::string clientId, std::string minerId,
                 std::unique_ptr<Connection> &conn, std::shared_ptr<ILog> &log)
-      : EndpointClient(clientId, minerId, conn, log)
-  {
-  }
+      : EndpointClient(clientId, minerId, conn, log),
+        threadTbb(&EndpointMiner::tbbLauncher, this),
+        threadOpenCl(&EndpointMiner::openClLauncher, this) {}
+
+  void openClLauncher() {}
+
+  void tbbLauncher() {}
 
   /* Here is a default implementation of make bid.
           I would suggest that you override this method as a starting point.
   */
   virtual void MakeBid(
-      const std::shared_ptr<Packet_ServerBeginRound> roundInfo,  // Information
-                                                                 // about this
-                                                                 // particular
-                                                                 // round
-      const std::shared_ptr<Packet_ServerRequestBid> request,    // The specific
-                                                                 // request we
-                                                                 // received
-      double period,        // How long this bidding period will last
-      double skewEstimate,  // An estimate of the time difference between us and
-                            // the server (positive -> we are ahead)
-      std::vector<uint32_t> &solution,  // Our vector of indices describing the
-                                        // solution
-      uint32_t *pProof  // Will contain the "proof", which is just the value
-      )
-  {
+      const std::shared_ptr<Packet_ServerBeginRound> roundInfo, // Information
+                                                                // about this
+                                                                // particular
+                                                                // round
+      const std::shared_ptr<Packet_ServerRequestBid> request,   // The specific
+                                                                // request we
+                                                                // received
+      double period,       // How long this bidding period will last
+      double skewEstimate, // An estimate of the time difference between us and
+                           // the server (positive -> we are ahead)
+      std::vector<uint32_t> &solution, // Our vector of indices describing the
+                                       // solution
+      uint32_t *pProof // Will contain the "proof", which is just the value
+      ) {
     double tSafetyMargin =
-        0.5;  // accounts for uncertainty in network conditions
+        0.5; // accounts for uncertainty in network conditions
     /* This is when the server has said all bids must be produced by, plus the
             adjustment for clock skew, and the safety margin
     */
 
-    tSafetyMargin += 0.3;  // from binning //TODO
+    tSafetyMargin += 0.3; // from binning //TODO
 
     double tFinish =
         request->timeStampReceiveBids * 1e-9 + skewEstimate - tSafetyMargin;
@@ -106,7 +110,7 @@ class EndpointMiner : public EndpointClient
         hashes[1][i] = PoolHashMiner(roundInfo.get(), indx[1][i], chainHash);
       }
       for (unsigned i = 0; i < BIN_SIZE; ++i) {
-        indx[2][i] = (1 << 31) | ((retained+i) & 0x3fffffff);
+        indx[2][i] = (1 << 31) | ((retained + i) & 0x3fffffff);
         hashes[2][i] = PoolHashMiner(roundInfo.get(), indx[2][i], chainHash);
       }
       retained += BIN_SIZE;
@@ -137,7 +141,7 @@ class EndpointMiner : public EndpointClient
         }
       }
 
-      double t = now() * 1e-9;  // Work out where we are against the deadline
+      double t = now() * 1e-9; // Work out where we are against the deadline
       double timeBudget = tFinish - t;
       Log(Log_Debug, "Finish trial %d, time remaining =%lg seconds.", nTrials,
           timeBudget);
@@ -145,7 +149,7 @@ class EndpointMiner : public EndpointClient
       temp_time = t;
 
       if (timeBudget <= 0)
-        break;  // We have run out of time, send what we have
+        break; // We have run out of time, send what we have
     }
     Log(Log_Info, "nTrials: %u", nTrials);
     double t2 = now() * 1e-9;
@@ -159,6 +163,6 @@ class EndpointMiner : public EndpointClient
   }
 };
 
-};  // bitecoin
+}; // bitecoin
 
 #endif
