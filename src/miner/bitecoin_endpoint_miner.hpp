@@ -101,10 +101,10 @@ class EndpointMiner : public EndpointClient
       uint64_t msdw;
       uint32_t indx;
 
-      bool operator<(point_top const &other) const{ return msdw < other.msdw; } 
+      bool operator<(point_top const &other) const { return msdw < other.msdw; }
     };
 
-    const unsigned ptvct_sz = 3;
+    const unsigned ptvct_sz = 1 << 16;
 
     // point vector
     std::vector<point_top> pts;
@@ -126,7 +126,7 @@ class EndpointMiner : public EndpointClient
 
       pts.push_back(pt);
 
-      fprintf(stderr, "id: %x\n", id);
+      // fprintf(stderr, "id: %x\n", id);
       // fprintf(stderr, "before: %8x %8x\n", temphash.limbs[7],
       // temphash.limbs[6]);
       // uint64_t sdh = uint64_t(temphash.limbs[6]) |
@@ -134,21 +134,55 @@ class EndpointMiner : public EndpointClient
       // fprintf(stderr, "after: %8x %8x\n\n", sdh>>32 , sdh & 0xffffFFFF);
     }
 
-    //for (auto pt : pts) {
+    // for (auto pt : pts) {
     //  fprintf(stderr, "idx : %8x\n", pt.indx);
     //  fprintf(stderr, "msdw: %" PRIx64 "\n", pt.msdw);
     //}
 
     std::sort(pts.begin(), pts.end());
 
-    //fprintf(stderr, "--------\n\n");
-    //for (auto pt : pts) {
+    // fprintf(stderr, "--------\n\n");
+    // for (auto pt : pts) {
     //  fprintf(stderr, "idx : %8x\n", pt.indx);
     //  fprintf(stderr, "msdw: %" PRIx64 "\n", pt.msdw);
     //}
+    // fprintf(stderr, "--------\n\n");
 
-    // while (1)
-    ;
+    uint64_t best_diff = 0xFFFFFFFFFFFFFFFFULL;
+    uint32_t best_offset = 0;
+
+    // note: .end()-1 for proper edge case
+    for (auto it = pts.begin(); it != pts.end() - 1; ++it) {
+      uint64_t curr_dw = it->msdw;
+      uint64_t next_dw = (it + 1)->msdw;
+      uint32_t curr_indx = it->indx;
+      uint32_t next_indx = (it + 1)->indx;
+
+      if (curr_indx == next_indx) {
+        Log(Log_Verbose, "Skipped identical index sample in diff finder");
+        continue;
+      }
+
+      uint64_t diff =
+          (curr_dw > next_dw) ? curr_dw - next_dw : next_dw - curr_dw;
+
+      // fprintf(stderr, "msdw_curr: %16" PRIx64 "\n", curr_dw);
+      // fprintf(stderr, "msdw_next: %16" PRIx64 "\n", next_dw);
+      // fprintf(stderr, "diff     : %16" PRIx64 "\n", diff);
+
+      if (diff < best_diff) {
+        best_diff = diff;
+        best_offset = (curr_indx > next_indx) ? curr_indx - next_indx
+                                              : next_indx - curr_indx;
+        //fprintf(stderr, "FOUND better diff\n");
+      }
+      // fprintf(stderr, "\n");
+    }
+    Log(Log_Fatal, "Best diff: %016" PRIx64 "", best_diff);
+    Log(Log_Fatal, "Best offset: %8x", best_offset);
+
+    //while (1)
+    //  ;
 
     double t1 = now() * 1e-9;
 
