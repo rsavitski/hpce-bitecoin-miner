@@ -1,7 +1,5 @@
 SHELL=/bin/bash
 
-CXX=clang++
-
 CPPFLAGS += -std=c++11 -W -Wall  -g
 CPPFLAGS += -O3 -lrt
 #-ltbb

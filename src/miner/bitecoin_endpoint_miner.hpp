@@ -11,6 +11,7 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <algorithm>
 
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_endpoint.hpp"
@@ -100,7 +101,7 @@ class EndpointMiner : public EndpointClient
       uint64_t msdw;
       uint32_t indx;
 
-      bool operator<(point_top const &other) { return msdw < other.msdw; }
+      bool operator<(point_top const &other) const{ return msdw < other.msdw; } 
     };
 
     const unsigned ptvct_sz = 3;
@@ -133,12 +134,18 @@ class EndpointMiner : public EndpointClient
       // fprintf(stderr, "after: %8x %8x\n\n", sdh>>32 , sdh & 0xffffFFFF);
     }
 
-    for (auto pt : pts) {
-      fprintf(stderr, "idx : %8x\n", pt.indx);
-      fprintf(stderr, "msdw: %" PRIx64 "\n", pt.msdw);
-    }
+    //for (auto pt : pts) {
+    //  fprintf(stderr, "idx : %8x\n", pt.indx);
+    //  fprintf(stderr, "msdw: %" PRIx64 "\n", pt.msdw);
+    //}
 
     std::sort(pts.begin(), pts.end());
+
+    //fprintf(stderr, "--------\n\n");
+    //for (auto pt : pts) {
+    //  fprintf(stderr, "idx : %8x\n", pt.indx);
+    //  fprintf(stderr, "msdw: %" PRIx64 "\n", pt.msdw);
+    //}
 
     // while (1)
     ;
