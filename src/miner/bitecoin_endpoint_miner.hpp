@@ -1,7 +1,6 @@
 #ifndef bitecoin_miner_endpoint_hpp
 #define bitecoin_miner_endpoint_hpp
 
-#include <cstdio>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdlib>
@@ -17,6 +16,10 @@
 #include "bitecoin_endpoint.hpp"
 #include "bitecoin_endpoint_client.hpp"
 #include "bitecoin_hashing_miner.hpp"
+
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+#include <cstdio>
 
 namespace bitecoin
 {
@@ -96,6 +99,8 @@ class EndpointMiner : public EndpointClient
     {
       uint64_t msdw;
       uint32_t indx;
+
+      bool operator<(point_top const &other) { return msdw < other.msdw; }
     };
 
     const unsigned ptvct_sz = 3;
@@ -120,7 +125,7 @@ class EndpointMiner : public EndpointClient
 
       pts.push_back(pt);
 
-       fprintf(stderr, "id: %u\n", id);
+      fprintf(stderr, "id: %x\n", id);
       // fprintf(stderr, "before: %8x %8x\n", temphash.limbs[7],
       // temphash.limbs[6]);
       // uint64_t sdh = uint64_t(temphash.limbs[6]) |
@@ -128,11 +133,15 @@ class EndpointMiner : public EndpointClient
       // fprintf(stderr, "after: %8x %8x\n\n", sdh>>32 , sdh & 0xffffFFFF);
     }
 
-    for (auto pt : pts)
-      fprintf(stderr, "%8u\n", pt.indx);
+    for (auto pt : pts) {
+      fprintf(stderr, "idx : %8x\n", pt.indx);
+      fprintf(stderr, "msdw: %" PRIx64 "\n", pt.msdw);
+    }
 
-    //while (1)
-      ;
+    std::sort(pts.begin(), pts.end());
+
+    // while (1)
+    ;
 
     double t1 = now() * 1e-9;
 
