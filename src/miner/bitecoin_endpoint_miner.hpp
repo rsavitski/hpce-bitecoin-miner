@@ -188,7 +188,7 @@ class EndpointMiner : public EndpointClient
     };
 
     // metapoint vector
-    const unsigned metaptvct_sz = 1 << 18;
+    const unsigned metaptvct_sz = 1 << 17;
     std::vector<metapoint_top> metapts;
 
     std::uniform_int_distribution<uint32_t> dis2(0, 0xFFFFFFFE - best_offset);
@@ -272,16 +272,6 @@ class EndpointMiner : public EndpointClient
 
     ///////////////////////////////////////////
 
-    // TODO: kill
-    // bigint_t bestProof;
-    // wide_ones(BIGINT_WORDS, bestProof.limbs);
-
-    // const unsigned BIN_SIZE = 1 << 16;
-    // uint32_t indx[BIN_SIZE];
-    // bigint_t hashes[BIN_SIZE];
-
-    // uint32_t currbestidx = 0;
-
     double t1 = now() * 1e-9;
     unsigned nTrials = 0;
     uint32_t r = 0;
@@ -290,22 +280,8 @@ class EndpointMiner : public EndpointClient
 
       Log(Log_Debug, "Trial %d.", nTrials);
 
-      // for (unsigned i = 0; i < BIN_SIZE && r < (0xFFFFffff - best_offset);
-      //     ++i) {
-      //  indx[i] = r;
-      //  bigint_t hash1 = PoolHashMiner(roundInfo.get(), indx[i], chainHash);
-      //  bigint_t hash2 =
-      //      PoolHashMiner(roundInfo.get(), indx[i] + best_offset, chainHash);
-      //  wide_xor(BIGINT_WORDS, hashes[i].limbs, hash1.limbs, hash2.limbs);
-      //  r++;
-      //}
-      // for (unsigned i = 0; i < BIN_SIZE; ++i) {
-      //  if (wide_compare(BIGINT_WORDS, hashes[i].limbs, bestProof.limbs) < 0)
-      // {
-      //    bestProof = hashes[i];
-      //    currbestidx = indx[i];
-      //  }
-      //}
+
+      //TODO
 
       double t = now() * 1e-9;  // Work out where we are against the deadline
       double timeBudget = tFinish - t;
@@ -332,10 +308,13 @@ class EndpointMiner : public EndpointClient
       wide_xor(8, proof.limbs, proof.limbs, hash.limbs);
     }
 
+    double score = wide_as_double(BIGINT_WORDS, proof.limbs);
+    double leadingzeros = 256 - log(score) * 1.44269504088896340736;
+        Log(Log_Info, "score=%lg, leading zeros=%lg.", score, leadingzeros);
+
     std::sort(bestSolution.begin(), bestSolution.end());
 
     solution = bestSolution;
-    // wide_copy(BIGINT_WORDS, pProof, bestProof.limbs);
     wide_copy(BIGINT_WORDS, pProof, proof.limbs);
 
     Log(Log_Verbose, "MakeBid - finish.");
