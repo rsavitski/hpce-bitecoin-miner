@@ -31,25 +31,38 @@ struct mpWrapper {
   ~mpWrapper() { delete[] limbs; }
 
   void importLimbs(const uint32_t *in) {
-    size_t offset = 0;
-    unsigned jEnd = mp_bits_per_limb / 32;
-    for (unsigned i = 0; i < words; ++i) {
-      mp_limb_t word = 0;
-      for (unsigned j = 0; j < jEnd; ++j) {
-        word += mp_limb_t(*(in + offset)) << (j * 32);
-        offset++;
+    if (mp_bits_per_limb == 64) {
+      for (unsigned i = 0; i < words; ++i) {
+        limbs[i] = mp_limb_t(in[2 * i]) | (mp_limb_t(in[2 * i + 1]) << 32);
       }
-      limbs[i] = word;
+    } else {
+      size_t offset = 0;
+      unsigned jEnd = mp_bits_per_limb / 32;
+      for (unsigned i = 0; i < words; ++i) {
+        mp_limb_t word = 0;
+        for (unsigned j = 0; j < jEnd; ++j) {
+          word += mp_limb_t(*(in + offset)) << (j * 32);
+          offset++;
+        }
+        limbs[i] = word;
+      }
     }
   }
 
   void exportLimbs(uint32_t *out) {
-    size_t offset = 0;
-    unsigned jEnd = mp_bits_per_limb / 32;
-    for (unsigned i = 0; i < words; ++i) {
-      for (unsigned j = 0; j < jEnd; ++j) {
-        out[offset] = uint32_t(limbs[i] >> j * 32);
-        offset++;
+    if (mp_bits_per_limb == 64) {
+      for (unsigned i = 0; i < words; ++i) {
+        out[2 * i] = uint32_t(limbs[i]);
+        out[2 * i + 1] = uint32_t(limbs[i] >> 32);
+      }
+    } else {
+      size_t offset = 0;
+      unsigned jEnd = mp_bits_per_limb / 32;
+      for (unsigned i = 0; i < words; ++i) {
+        for (unsigned j = 0; j < jEnd; ++j) {
+          out[offset] = uint32_t(limbs[i] >> j * 32);
+          offset++;
+        }
       }
     }
   }
@@ -148,11 +161,12 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
   x.limbs[6] = (uint32_t)(chainHash & 0xFFFFFFFFULL);
   x.limbs[7] = (uint32_t)(chainHash & 0xFFFFFFFFULL);
 
-  mpWrapper x1, x2, carry, c;
+  static mpWrapper x1, x2, carry, c;
+  static mpWrapper temp(256);
+
   x1.importLimbs(x.limbs);
   x2.importLimbs(x.limbs + 4);
   c.importLimbs(pParams->c);
-  mpWrapper temp(256);
   // Now step forward by the number specified by the server
   for (unsigned j = 0; j < pParams->hashSteps; j++) {
     temp.reset();
@@ -161,7 +175,7 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
     // [carry,lo(x)] = lo(tmp)+hi(x)
     carry.limbs[0] = add128(x1.limbs, temp.limbs, x2.limbs);
     // hi(x) = hi(tmp) + carry
-    add128(x2.limbs, temp.limbs + (128/mp_bits_per_limb), carry.limbs);
+    add128(x2.limbs, temp.limbs + (128 / mp_bits_per_limb), carry.limbs);
   }
   x1.exportLimbs(x.limbs);
   x2.exportLimbs(x.limbs + 4);
