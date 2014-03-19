@@ -12,11 +12,54 @@
 #include <cstdint>
 #include <stdexcept>
 #include <algorithm>
+#include <gmp.h>
 
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_hashing.hpp"
 
 namespace bitecoin {
+
+// wrapper for 128 bits integers
+template<size_t size> struct mpWrapper {
+  mp_limb_t *limbs;
+  const size_t words;
+  mpWrapper() : words(size / mp_bits_per_limb) {
+    assert(size % mp_bits_per_limb == 0);
+    limbs = new mp_limb_t[words];
+  }
+
+  ~mpWrapper() { delete[] limbs; }
+
+  void importLimbs(uint32_t *in) {
+    size_t offset = 0;
+    for (unsigned i = 0; i < words; ++i) {
+      mp_limb_t word = 0;
+      for (unsigned j = 0; j < mp_bits_per_limb / sizeof(uint32_t); ++j) {
+        word += mp_limb_t(*(in + offset)) << (j * sizeof(uint32_t));
+        offset++;
+      }
+      limbs[i] = word;
+    }
+  }
+
+  void exportLimbs(uint32_t *out) {
+    size_t offset = 0;
+    for (unsigned i = 0; i < words; ++i) {
+      for (unsigned j = 0; j < mp_bits_per_limb / sizeof(uint32_t); ++j) {
+        out[offset] = uint32_t(limbs[i] >> j *sizeof(uint32_t));
+        offset++;
+      }
+    }
+  }
+};
+
+void multiply128(mpWrapper<256> &results, mpWrapper<128> &a, mpWrapper<128> &b) {
+  mpn_mul_n(results.limbs, a.limbs, b.limbs, 128/mp_bits_per_limb);
+}
+
+mp_limb_t add128(mpWrapper<128> &results, mpWrapper<128> &a, mpWrapper<128> &b) {
+  return mpn_add_n(results.limbs, a.limbs, b.limbs, 128/mp_bits_per_limb);
+}
 
 class fnvIterative {
   static const uint64_t FNV_64_PRIME = 0x100000001b3ULL;
@@ -75,7 +118,7 @@ public:
 // result.
 bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
                        uint64_t chainHash) {
-  //assert(NLIMBS == 4 * 2);
+  // assert(NLIMBS == 4 * 2);
 
   // The value x is 8 words long (8*32 bits in total)
   // We build (MSB to LSB) as  [ chainHash ; roundSalt ; roundId ; index ]
@@ -88,8 +131,13 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
   x.limbs[6] = (uint32_t)(chainHash & 0xFFFFFFFFULL);
   x.limbs[7] = (uint32_t)(chainHash & 0xFFFFFFFFULL);
 
+  // mpWrapper<128> x1, x2;
+  // x1.import(x.limbs);
+  // x2.import(x.limbs + 4);
+  // mpWrapper<256> tmp;
   // Now step forward by the number specified by the server
   for (unsigned j = 0; j < pParams->hashSteps; j++) {
+    // tmp.reset();
     bigint_t tmp;
     // tmp=lo(x)*c;
     wide_mul(4, tmp.limbs + 4, tmp.limbs, x.limbs, pParams->c);
@@ -100,7 +148,6 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
   }
   return x;
 }
-
 };
 
 #endif

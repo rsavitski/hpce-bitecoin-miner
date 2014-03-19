@@ -102,6 +102,7 @@ class EndpointMiner : public EndpointClient
     std::uniform_int_distribution<uint32_t> dis;
 
     // generate point vector
+    double t1 = now() * 1e-9;
     for (unsigned i = 0; i < ptvct_sz; ++i) {
       uint32_t id = dis(gen);
       point_top pt;
@@ -121,7 +122,8 @@ class EndpointMiner : public EndpointClient
       // (uint64_t(temphash.limbs[7]) << 32);
       // fprintf(stderr, "after: %8x %8x\n\n", sdh>>32 , sdh & 0xffffFFFF);
     }
-
+    double t2 = now() * 1e-9;
+    Log(Log_Info, "Time taken %lf", t2-t1);
     // for (auto pt : pts) {
     //  fprintf(stderr, "idx : %8x\n", pt.indx);
     //  fprintf(stderr, "msdw: %" PRIx64 "\n", pt.msdw);
@@ -270,7 +272,6 @@ class EndpointMiner : public EndpointClient
 
     ///////////////////////////////////////////
 
-    double t1 = now() * 1e-9;
     unsigned nTrials = 0;
     uint32_t r = 0;
     while (1) {
@@ -289,7 +290,6 @@ class EndpointMiner : public EndpointClient
         break;  // We have run out of time, send what we have
     }
     Log(Log_Info, "nTrials: %u", nTrials);
-    double t2 = now() * 1e-9;
     // Log(Log_Info, "Effective hashrate: %lf",
     //    ((double)nTrials * BIN_SIZE * BIN_SIZE * BIN_SIZE) / (t2 - t1));
 

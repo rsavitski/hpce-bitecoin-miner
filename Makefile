@@ -1,9 +1,9 @@
 SHELL=/bin/bash
 
 CPPFLAGS += -std=c++11 -W -Wall  -g
-CPPFLAGS += -O3 -lrt
-#-ltbb
+CPPFLAGS += -O3
 CPPFLAGS += -I include -I src/miner
+LDLIBS += -lrt -lgmp
 
 CLIENT=src/bitecoin_miner
 EXCHANGE_ADDR = 155.198.117.237
