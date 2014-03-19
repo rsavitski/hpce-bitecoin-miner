@@ -13,6 +13,8 @@
 #include <map>
 #include <algorithm>
 
+#include "tbb/parallel_for.h"
+
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_endpoint.hpp"
 #include "bitecoin_endpoint_client.hpp"
@@ -22,51 +24,46 @@
 #include <inttypes.h>
 #include <cstdio>
 
-namespace bitecoin
-{
+namespace bitecoin {
 
-class EndpointMiner : public EndpointClient
-{
- private:
+class EndpointMiner : public EndpointClient {
+private:
   EndpointMiner(EndpointMiner &) = delete;
   void operator=(const EndpointMiner &) = delete;
 
   unsigned m_knownRounds;
   std::map<std::string, unsigned> m_knownCoins;
 
- public:
+public:
   EndpointMiner(std::string clientId, std::string minerId,
                 std::unique_ptr<Connection> &conn, std::shared_ptr<ILog> &log)
-      : EndpointClient(clientId, minerId, conn, log)
-  {
-  }
+      : EndpointClient(clientId, minerId, conn, log) {}
 
   /* Here is a default implementation of make bid.
           I would suggest that you override this method as a starting point.
   */
   virtual void MakeBid(
-      const std::shared_ptr<Packet_ServerBeginRound> roundInfo,  // Information
-                                                                 // about this
-                                                                 // particular
-                                                                 // round
-      const std::shared_ptr<Packet_ServerRequestBid> request,    // The specific
-                                                                 // request we
-                                                                 // received
-      double period,        // How long this bidding period will last
-      double skewEstimate,  // An estimate of the time difference between us and
-                            // the server (positive -> we are ahead)
-      std::vector<uint32_t> &solution,  // Our vector of indices describing the
-                                        // solution
-      uint32_t *pProof  // Will contain the "proof", which is just the value
-      )
-  {
+      const std::shared_ptr<Packet_ServerBeginRound> roundInfo, // Information
+                                                                // about this
+                                                                // particular
+                                                                // round
+      const std::shared_ptr<Packet_ServerRequestBid> request,   // The specific
+                                                                // request we
+                                                                // received
+      double period,       // How long this bidding period will last
+      double skewEstimate, // An estimate of the time difference between us and
+                           // the server (positive -> we are ahead)
+      std::vector<uint32_t> &solution, // Our vector of indices describing the
+                                       // solution
+      uint32_t *pProof // Will contain the "proof", which is just the value
+      ) {
     double tSafetyMargin =
-        0.5;  // accounts for uncertainty in network conditions
+        0.5; // accounts for uncertainty in network conditions
     /* This is when the server has said all bids must be produced by, plus the
             adjustment for clock skew, and the safety margin
     */
 
-    tSafetyMargin += 0.3;  // from binning //TODO
+    tSafetyMargin += 0.3; // from binning //TODO
 
     double tFinish =
         request->timeStampReceiveBids * 1e-9 + skewEstimate - tSafetyMargin;
@@ -84,18 +81,17 @@ class EndpointMiner : public EndpointClient
     uint64_t chainHash = hasher((const char *)&roundInfo->chainData[0],
                                 roundInfo->chainData.size());
 
-    struct point_top
-    {
+    struct point_top {
       uint64_t msdw;
       uint32_t indx;
 
       bool operator<(point_top const &other) const { return msdw < other.msdw; }
     };
 
-    const unsigned ptvct_sz = 1 << 16;
+    const unsigned ptvct_sz = 1 << 24;
 
     // point vector
-    std::vector<point_top> pts;
+    std::vector<point_top> pts(ptvct_sz);
 
     std::random_device rd;
     std::minstd_rand gen(rd());
@@ -106,14 +102,15 @@ class EndpointMiner : public EndpointClient
     for (unsigned i = 0; i < ptvct_sz; ++i) {
       uint32_t id = dis(gen);
       point_top pt;
-
-      bigint_t temphash = PoolHashMiner(roundInfo.get(), id, chainHash);
-
       pt.indx = id;
-      pt.msdw =
+      pts[i] = pt;
+    }
+    // generate point vector
+    tbb::parallel_for(0u, ptvct_sz, [&](unsigned i) {
+      bigint_t temphash =
+          PoolHashMiner(roundInfo.get(), pts[i].indx, chainHash);
+      pts[i].msdw =
           uint64_t(temphash.limbs[6]) | (uint64_t(temphash.limbs[7]) << 32);
-
-      pts.push_back(pt);
 
       // fprintf(stderr, "id: %x\n", id);
       // fprintf(stderr, "before: %8x %8x\n", temphash.limbs[7],
@@ -121,9 +118,10 @@ class EndpointMiner : public EndpointClient
       // uint64_t sdh = uint64_t(temphash.limbs[6]) |
       // (uint64_t(temphash.limbs[7]) << 32);
       // fprintf(stderr, "after: %8x %8x\n\n", sdh>>32 , sdh & 0xffffFFFF);
-    }
+    });
     double t2 = now() * 1e-9;
-    Log(Log_Info, "Time taken %lf", t2-t1);
+    Log(Log_Info, "Time taken %lf", t2 - t1);
+
     // for (auto pt : pts) {
     //  fprintf(stderr, "idx : %8x\n", pt.indx);
     //  fprintf(stderr, "msdw: %" PRIx64 "\n", pt.msdw);
@@ -171,14 +169,12 @@ class EndpointMiner : public EndpointClient
     Log(Log_Fatal, "Best diff: %016" PRIx64 "", best_diff);
     Log(Log_Fatal, "Best offset: %8x", best_offset);
 
-    struct metapoint_top
-    {
-      uint64_t msdw;  // 2 most significant word (MSW followed by 2nd MSW)
-      uint64_t tdw;   // 3rd, 4th MS words
-      uint32_t indx;  // base index
+    struct metapoint_top {
+      uint64_t msdw; // 2 most significant word (MSW followed by 2nd MSW)
+      uint64_t tdw;  // 3rd, 4th MS words
+      uint32_t indx; // base index
 
-      bool operator<(metapoint_top const &other) const
-      {
+      bool operator<(metapoint_top const &other) const {
         if (msdw == other.msdw) {
           return tdw < other.tdw;
         } else
@@ -188,34 +184,33 @@ class EndpointMiner : public EndpointClient
 
     // metapoint vector
     const unsigned metaptvct_sz =
-        1 << 18;  // TODO: autotune, maybe golden diff finder too
-    std::vector<metapoint_top> metapts;
+        1 << 24; // TODO: autotune, maybe golden diff finder too
+    std::vector<metapoint_top> metapts(metaptvct_sz);
 
     std::uniform_int_distribution<uint32_t> dis2(0, 0xFFFFFFFE - best_offset);
 
     t1 = now() * 1e-9;
     // generate point vector
     for (unsigned i = 0; i < metaptvct_sz; ++i) {
-      uint32_t id = dis2(gen);
-      metapoint_top pt;
+      metapts[i].indx = dis2(gen);
+    }
 
-      bigint_t temphash = PoolHashMiner(roundInfo.get(), id, chainHash);
-      bigint_t temphash2 =
-          PoolHashMiner(roundInfo.get(), id + best_offset, chainHash);
+    tbb::parallel_for(0u, metaptvct_sz, [&](unsigned i) {
+      bigint_t temphash =
+          PoolHashMiner(roundInfo.get(), metapts[i].indx, chainHash);
+      bigint_t temphash2 = PoolHashMiner(
+          roundInfo.get(), metapts[i].indx + best_offset, chainHash);
 
       uint32_t msw = temphash.limbs[7] ^ temphash2.limbs[7];
       uint32_t msw2 = temphash.limbs[6] ^ temphash2.limbs[6];
       uint32_t msw3 = temphash.limbs[5] ^ temphash2.limbs[5];
       uint32_t msw4 = temphash.limbs[4] ^ temphash2.limbs[4];
 
-      pt.indx = id;
-      pt.msdw = uint64_t(msw2) | (uint64_t(msw) << 32);
-      pt.tdw = uint64_t(msw4) | (uint64_t(msw3) << 32);
-
-      metapts.push_back(pt);
-    }
+      metapts[i].msdw = uint64_t(msw2) | (uint64_t(msw) << 32);
+      metapts[i].tdw = uint64_t(msw4) | (uint64_t(msw3) << 32);
+    });
     t2 = now() * 1e-9;
-    Log(Log_Info, "Time taken %lf", t2-t1);
+    Log(Log_Info, "Time taken %lf", t2 - t1);
     // fprintf(stderr, "--------\n\n");
     // for (auto pt : metapts) {
     //  fprintf(stderr, "idx : %8x\n", pt.indx);
@@ -283,13 +278,13 @@ class EndpointMiner : public EndpointClient
 
       // TODO
 
-      double t = now() * 1e-9;  // Work out where we are against the deadline
+      double t = now() * 1e-9; // Work out where we are against the deadline
       double timeBudget = tFinish - t;
       Log(Log_Debug, "Finish trial %d, time remaining =%lg seconds.", nTrials,
           timeBudget);
 
       if (timeBudget <= 0)
-        break;  // We have run out of time, send what we have
+        break; // We have run out of time, send what we have
     }
     Log(Log_Info, "nTrials: %u", nTrials);
     // Log(Log_Info, "Effective hashrate: %lf",
@@ -320,6 +315,6 @@ class EndpointMiner : public EndpointClient
   }
 };
 
-};  // bitecoin
+}; // bitecoin
 
 #endif
