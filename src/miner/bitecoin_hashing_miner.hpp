@@ -20,22 +20,23 @@
 namespace bitecoin {
 
 // wrapper for 128 bits integers
-template<size_t size> struct mpWrapper {
+struct mpWrapper {
   mp_limb_t *limbs;
   const size_t words;
-  mpWrapper() : words(size / mp_bits_per_limb) {
+  mpWrapper(size_t size = 128) : words(size / mp_bits_per_limb) {
     assert(size % mp_bits_per_limb == 0);
-    limbs = new mp_limb_t[words];
+    limbs = new mp_limb_t[words]();
   }
 
   ~mpWrapper() { delete[] limbs; }
 
-  void importLimbs(uint32_t *in) {
+  void importLimbs(const uint32_t *in) {
     size_t offset = 0;
+    unsigned jEnd = mp_bits_per_limb / 32;
     for (unsigned i = 0; i < words; ++i) {
       mp_limb_t word = 0;
-      for (unsigned j = 0; j < mp_bits_per_limb / sizeof(uint32_t); ++j) {
-        word += mp_limb_t(*(in + offset)) << (j * sizeof(uint32_t));
+      for (unsigned j = 0; j < jEnd; ++j) {
+        word += mp_limb_t(*(in + offset)) << (j * 32);
         offset++;
       }
       limbs[i] = word;
@@ -44,22 +45,38 @@ template<size_t size> struct mpWrapper {
 
   void exportLimbs(uint32_t *out) {
     size_t offset = 0;
+    unsigned jEnd = mp_bits_per_limb / 32;
     for (unsigned i = 0; i < words; ++i) {
-      for (unsigned j = 0; j < mp_bits_per_limb / sizeof(uint32_t); ++j) {
-        out[offset] = uint32_t(limbs[i] >> j *sizeof(uint32_t));
+      for (unsigned j = 0; j < jEnd; ++j) {
+        out[offset] = uint32_t(limbs[i] >> j * 32);
         offset++;
       }
     }
   }
+
+  void reset() {
+    for (unsigned i = 0; i < words; ++i) {
+      limbs[i] = 0;
+    }
+  }
 };
 
-void multiply128(mpWrapper<256> &results, mpWrapper<128> &a, mpWrapper<128> &b) {
-  mpn_mul_n(results.limbs, a.limbs, b.limbs, 128/mp_bits_per_limb);
+void multiply128(mp_limb_t *results, mp_limb_t *a, mp_limb_t *b) {
+  mpn_mul_n(results, a, b, 128 / mp_bits_per_limb);
 }
 
-mp_limb_t add128(mpWrapper<128> &results, mpWrapper<128> &a, mpWrapper<128> &b) {
-  return mpn_add_n(results.limbs, a.limbs, b.limbs, 128/mp_bits_per_limb);
+mp_limb_t add128(mp_limb_t *results, mp_limb_t *a, mp_limb_t *b) {
+  return mpn_add_n(results, a, b, 128 / mp_bits_per_limb);
 }
+
+// mp_limb_t add128(mpWrapper &results, mpWrapper &a, mp_limb_t b) {
+//   mp_limb_t *_b = new mp_limb_t[128/mp_bits_per_limb]();
+//   *_b = b;
+//   mp_limb_t carry =  mpn_add_n(results.limbs, a.limbs, _b,
+// 128/mp_bits_per_limb);
+//   delete[] _b;
+//   return carry;
+// }
 
 class fnvIterative {
   static const uint64_t FNV_64_PRIME = 0x100000001b3ULL;
@@ -131,21 +148,23 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
   x.limbs[6] = (uint32_t)(chainHash & 0xFFFFFFFFULL);
   x.limbs[7] = (uint32_t)(chainHash & 0xFFFFFFFFULL);
 
-  // mpWrapper<128> x1, x2;
-  // x1.import(x.limbs);
-  // x2.import(x.limbs + 4);
-  // mpWrapper<256> tmp;
+  mpWrapper x1, x2, carry, c;
+  x1.importLimbs(x.limbs);
+  x2.importLimbs(x.limbs + 4);
+  c.importLimbs(pParams->c);
+  mpWrapper temp(256);
   // Now step forward by the number specified by the server
   for (unsigned j = 0; j < pParams->hashSteps; j++) {
-    // tmp.reset();
-    bigint_t tmp;
+    temp.reset();
     // tmp=lo(x)*c;
-    wide_mul(4, tmp.limbs + 4, tmp.limbs, x.limbs, pParams->c);
+    multiply128(temp.limbs, x1.limbs, c.limbs);
     // [carry,lo(x)] = lo(tmp)+hi(x)
-    uint32_t carry = wide_add(4, x.limbs, tmp.limbs, x.limbs + 4);
+    carry.limbs[0] = add128(x1.limbs, temp.limbs, x2.limbs);
     // hi(x) = hi(tmp) + carry
-    wide_add(4, x.limbs + 4, tmp.limbs + 4, carry);
+    add128(x2.limbs, temp.limbs + (128/mp_bits_per_limb), carry.limbs);
   }
+  x1.exportLimbs(x.limbs);
+  x2.exportLimbs(x.limbs + 4);
   return x;
 }
 };
