@@ -73,12 +73,6 @@ class EndpointMiner : public EndpointClient
 
     Log(Log_Verbose, "MakeBid - start, total period=%lg.", period);
 
-    /*
-            We will use this to track the best solution we have created so far.
-    */
-    bigint_t bestProof;
-    wide_ones(BIGINT_WORDS, bestProof.limbs);
-
     // TODO: incremental hasher temporarily disabled to work with local server
     // static size_t previousChainSize = 0;
     // uint64_t chainHash = fnvIterative::getInstance()(
@@ -89,12 +83,6 @@ class EndpointMiner : public EndpointClient
     hash::fnv<64> hasher;
     uint64_t chainHash = hasher((const char *)&roundInfo->chainData[0],
                                 roundInfo->chainData.size());
-
-    // TODO: kill
-    std::vector<uint32_t> bestSolution(3u);
-    // const unsigned BIN_SIZE = 465;
-    // uint32_t indx[3][BIN_SIZE];
-    // bigint_t hashes[3][BIN_SIZE];
 
     struct point_top
     {
@@ -174,24 +162,50 @@ class EndpointMiner : public EndpointClient
         best_diff = diff;
         best_offset = (curr_indx > next_indx) ? curr_indx - next_indx
                                               : next_indx - curr_indx;
-        //fprintf(stderr, "FOUND better diff\n");
+        // fprintf(stderr, "FOUND better diff\n");
       }
       // fprintf(stderr, "\n");
     }
     Log(Log_Fatal, "Best diff: %016" PRIx64 "", best_diff);
     Log(Log_Fatal, "Best offset: %8x", best_offset);
 
-    //while (1)
+    // while (1)
     //  ;
 
+    // TODO: kill
+    bigint_t bestProof;
+    wide_ones(BIGINT_WORDS, bestProof.limbs);
+    std::vector<uint32_t> bestSolution;
+
+    const unsigned BIN_SIZE = 1 << 16;
+    uint32_t indx[BIN_SIZE];
+    bigint_t hashes[BIN_SIZE];
+
+    uint32_t currbestidx = 0;
+
     double t1 = now() * 1e-9;
-
     unsigned nTrials = 0;
-
+    uint32_t r = 0;
     while (1) {
       ++nTrials;
 
       Log(Log_Debug, "Trial %d.", nTrials);
+
+      for (unsigned i = 0; i < BIN_SIZE && r < (0xFFFFffff - best_offset);
+           ++i) {
+        indx[i] = r;
+        bigint_t hash1 = PoolHashMiner(roundInfo.get(), indx[i], chainHash);
+        bigint_t hash2 =
+            PoolHashMiner(roundInfo.get(), indx[i] + best_offset, chainHash);
+        wide_xor(BIGINT_WORDS, hashes[i].limbs, hash1.limbs, hash2.limbs);
+        r++;
+      }
+      for (unsigned i = 0; i < BIN_SIZE; ++i) {
+        if (wide_compare(BIGINT_WORDS, hashes[i].limbs, bestProof.limbs) < 0) {
+          bestProof = hashes[i];
+          currbestidx = indx[i];
+        }
+      }
 
       // for (unsigned i = 0; i < BIN_SIZE; ++i) {
       //  indx[0][i] = (retained + i) & 0x3fffffff;
@@ -248,6 +262,8 @@ class EndpointMiner : public EndpointClient
     // Log(Log_Info, "Effective hashrate: %lf",
     //    ((double)nTrials * BIN_SIZE * BIN_SIZE * BIN_SIZE) / (t2 - t1));
 
+    bestSolution.push_back(currbestidx);
+    bestSolution.push_back(currbestidx + best_offset);
     solution = bestSolution;
     wide_copy(BIGINT_WORDS, pProof, bestProof.limbs);
 
