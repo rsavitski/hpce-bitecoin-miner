@@ -80,6 +80,8 @@ class EndpointMiner : public EndpointClient
     //    roundInfo->chainData.size() - previousChainSize);
     // previousChainSize = roundInfo->chainData.size();
 
+    Log(Log_Verbose, "Maxindices: %u", roundInfo->maxIndices);
+
     hash::fnv<64> hasher;
     uint64_t chainHash = hasher((const char *)&roundInfo->chainData[0],
                                 roundInfo->chainData.size());
@@ -92,8 +94,11 @@ class EndpointMiner : public EndpointClient
       bool operator<(point_top const &other) const { return msdw < other.msdw; }
     };
 
+    //Log(Log_Info, "Stamp after fnv");
+
     const unsigned ptvct_sz = 1 << 16;
 
+    Log(Log_Info, "Stamp"); //TODO
     // point vector
     std::vector<point_top> pts;
 
@@ -126,9 +131,11 @@ class EndpointMiner : public EndpointClient
     //  fprintf(stderr, "idx : %8x\n", pt.indx);
     //  fprintf(stderr, "msdw: %" PRIx64 "\n", pt.msdw);
     //}
+    Log(Log_Info, "Stamp"); //TODO
 
     std::sort(pts.begin(), pts.end());
 
+    Log(Log_Info, "Stamp"); //TODO
     // fprintf(stderr, "--------\n\n");
     // for (auto pt : pts) {
     //  fprintf(stderr, "idx : %8x\n", pt.indx);
@@ -151,6 +158,7 @@ class EndpointMiner : public EndpointClient
         continue;
       }
 
+      // arithmetic difference for differential attack
       uint64_t diff =
           (curr_dw > next_dw) ? curr_dw - next_dw : next_dw - curr_dw;
 
@@ -169,18 +177,25 @@ class EndpointMiner : public EndpointClient
     Log(Log_Fatal, "Best diff: %016" PRIx64 "", best_diff);
     Log(Log_Fatal, "Best offset: %8x", best_offset);
 
+    pts.clear();
+    Log(Log_Info, "Stamp before metapt gen"); //TODO
+
+    // done with offset search
+
     struct metapoint_top
     {
-      uint64_t msdw;  // 2 most significant word (MSW followed by 2nd MSW)
-      uint64_t tdw;   // 3rd, 4th MS words
+      bigint_t point;
+      //uint64_t msdw;  // 2 most significant word (MSW followed by 2nd MSW)
+      //uint64_t tdw;   // 3rd, 4th MS words
       uint32_t indx;  // base index
 
       bool operator<(metapoint_top const &other) const
       {
-        if (msdw == other.msdw) {
-          return tdw < other.tdw;
-        } else
-          return msdw < other.msdw;
+       // if (msdw == other.msdw) {
+       //   return tdw < other.tdw;
+       // } else
+       //   return msdw < other.msdw;
+          return wide_compare(BIGINT_WORDS, point.limbs, other.point.limbs) < 0;
       }
     };
 
@@ -191,7 +206,7 @@ class EndpointMiner : public EndpointClient
 
     std::uniform_int_distribution<uint32_t> dis2(0, 0xFFFFFFFE - best_offset);
 
-    // generate point vector
+    // generate metapoint vector
     for (unsigned i = 0; i < metaptvct_sz; ++i) {
       uint32_t id = dis2(gen);
       metapoint_top pt;
@@ -200,18 +215,22 @@ class EndpointMiner : public EndpointClient
       bigint_t temphash2 =
           PoolHashMiner(roundInfo.get(), id + best_offset, chainHash);
 
-      uint32_t msw = temphash.limbs[7] ^ temphash2.limbs[7];
-      uint32_t msw2 = temphash.limbs[6] ^ temphash2.limbs[6];
-      uint32_t msw3 = temphash.limbs[5] ^ temphash2.limbs[5];
-      uint32_t msw4 = temphash.limbs[4] ^ temphash2.limbs[4];
+      //uint32_t msw = temphash.limbs[7] ^ temphash2.limbs[7];
+      //uint32_t msw2 = temphash.limbs[6] ^ temphash2.limbs[6];
+      //uint32_t msw3 = temphash.limbs[5] ^ temphash2.limbs[5];
+      //uint32_t msw4 = temphash.limbs[4] ^ temphash2.limbs[4];
 
+      //pt.indx = id;
+      //pt.msdw = uint64_t(msw2) | (uint64_t(msw) << 32);
+      //pt.tdw = uint64_t(msw4) | (uint64_t(msw3) << 32);
+      
+      wide_xor(8, pt.point.limbs, temphash.limbs, temphash2.limbs);
       pt.indx = id;
-      pt.msdw = uint64_t(msw2) | (uint64_t(msw) << 32);
-      pt.tdw = uint64_t(msw4) | (uint64_t(msw3) << 32);
 
       metapts.push_back(pt);
     }
 
+    Log(Log_Info, "Stamp after metapt gen"); //TODO
     // fprintf(stderr, "--------\n\n");
     // for (auto pt : metapts) {
     //  fprintf(stderr, "idx : %8x\n", pt.indx);
@@ -221,6 +240,7 @@ class EndpointMiner : public EndpointClient
     // fprintf(stderr, "--------\n\n");
 
     std::sort(metapts.begin(), metapts.end());
+    Log(Log_Info, "Stamp: metapts sorted"); //TODO
 
     // fprintf(stderr, "--------\n\n");
     // for (auto pt : metapts) {
@@ -230,9 +250,12 @@ class EndpointMiner : public EndpointClient
     //}
     // fprintf(stderr, "--------\n\n");
 
-    metapoint_top mbest_diff;
-    mbest_diff.msdw = 0xFFFFFFFFFFFFFFFFULL;
-    mbest_diff.tdw = 0xFFFFFFFF;
+    //metapoint_top mbest_diff;
+    //mbest_diff.msdw = 0xFFFFFFFFFFFFFFFFULL;
+    //mbest_diff.tdw = 0xFFFFFFFF;
+    
+    bigint_t mbest;
+    wide_ones(BIGINT_WORDS, mbest.limbs);
 
     uint32_t metaidx[2];
 
@@ -247,18 +270,27 @@ class EndpointMiner : public EndpointClient
         continue;
       }
 
-      metapoint_top xored;
-      xored.msdw = it->msdw ^ (it + 1)->msdw;
-      xored.tdw = it->tdw ^ (it + 1)->tdw;
+      //metapoint_top xored;
+      //xored.msdw = it->msdw ^ (it + 1)->msdw;
+      //xored.tdw = it->tdw ^ (it + 1)->tdw;
+      
+      bigint_t xoredw;
+      wide_xor(8, xoredw.limbs, it->point.limbs, (it+1)->point.limbs);
 
-      if (xored < mbest_diff) {
-        // fprintf(stderr, "FOUND better metadiff\n");
-
-        mbest_diff = xored;
+      if (wide_compare(BIGINT_WORDS, xoredw.limbs, mbest.limbs) < 0){
+        mbest = xoredw;
         metaidx[0] = curr_indx;
         metaidx[1] = next_indx;
       }
+      //if (xored < mbest_diff) {
+      //  // fprintf(stderr, "FOUND better metadiff\n");
+
+      //  mbest_diff = xored;
+      //  metaidx[0] = curr_indx;
+      //  metaidx[1] = next_indx;
+      //}
     }
+    Log(Log_Info, "Stamp"); //TODO
 
     // fprintf(stderr, "--------\n\n");
     // fprintf(stderr, "idx : %8x\n", metaidx[0]);
