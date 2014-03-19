@@ -175,7 +175,7 @@ class EndpointMiner : public EndpointClient
     struct metapoint_top
     {
       uint64_t msdw;  // 2 most significant word (MSW followed by 2nd MSW)
-      uint32_t tdw;   // 3rd most significant word
+      uint64_t tdw;   // 3rd, 4th MS words
       uint32_t indx;  // base index
 
       bool operator<(metapoint_top const &other) const
@@ -188,7 +188,7 @@ class EndpointMiner : public EndpointClient
     };
 
     // metapoint vector
-    const unsigned metaptvct_sz = 1 << 16;
+    const unsigned metaptvct_sz = 1 << 18;
     std::vector<metapoint_top> metapts;
 
     std::uniform_int_distribution<uint32_t> dis2(0, 0xFFFFFFFE - best_offset);
@@ -205,10 +205,12 @@ class EndpointMiner : public EndpointClient
       uint32_t msw = temphash.limbs[7] ^ temphash2.limbs[7];
       uint32_t msw2 = temphash.limbs[6] ^ temphash2.limbs[6];
       uint32_t msw3 = temphash.limbs[5] ^ temphash2.limbs[5];
+      uint32_t msw4 = temphash.limbs[4] ^ temphash2.limbs[4];
 
       pt.indx = id;
       pt.msdw = uint64_t(msw2) | (uint64_t(msw) << 32);
-      pt.tdw = msw3;
+      pt.tdw = uint64_t(msw4) | (uint64_t(msw3) << 32);
+      //pt.tdw = msw3;
 
       metapts.push_back(pt);
     }
@@ -260,12 +262,12 @@ class EndpointMiner : public EndpointClient
       }
     }
 
-    fprintf(stderr, "--------\n\n");
-    fprintf(stderr, "idx : %8x\n", metaidx[0]);
-    fprintf(stderr, "idx : %8x\n", metaidx[1]);
-    fprintf(stderr, "msdw: %016" PRIx64 "\n", mbest_diff.msdw);
-    fprintf(stderr, "tdw: %8x\n", mbest_diff.tdw);
-    fprintf(stderr, "--------\n\n");
+    //fprintf(stderr, "--------\n\n");
+    //fprintf(stderr, "idx : %8x\n", metaidx[0]);
+    //fprintf(stderr, "idx : %8x\n", metaidx[1]);
+    //fprintf(stderr, "msdw: %016" PRIx64 "\n", mbest_diff.msdw);
+    //fprintf(stderr, "tdw: %8x\n", mbest_diff.tdw);
+    //fprintf(stderr, "--------\n\n");
     Log(Log_Fatal, "Finished metasearch");
 
     ///////////////////////////////////////////
