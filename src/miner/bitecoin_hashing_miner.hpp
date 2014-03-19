@@ -16,7 +16,77 @@
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_hashing.hpp"
 
+typedef __uint128_t uint128_t;
+
 namespace bitecoin {
+
+// http://locklessinc.com/articles/256bit_arithmetic/
+
+uint128_t fastermul65(uint64_t x1, uint64_t x2, uint64_t y1, uint64_t y2,
+                      uint64_t *carry = nullptr) {
+  uint64_t c = 0;
+  uint64_t t1 = x1 - x2;
+  uint64_t t2 = y2 - y1;
+  uint128_t result = (uint128_t)t1 * t2;
+
+  if ((x2 > x1) && t2) {
+    result -= (uint128_t)t2 << 64;
+    c = ~c;
+  }
+
+  if ((y1 > y2) && t1) {
+    result -= (uint128_t)t1 << 64;
+    c = ~c;
+  }
+
+  if (carry) *carry = c;
+  return result;
+}
+
+void fasterMul128(uint32_t *result, const uint32_t *x, const uint32_t *y) {
+  uint64_t x1 = uint64_t(x[0]) | (uint64_t(x[1]) << 32);
+  uint64_t x2 = uint64_t(x[2]) | (uint64_t(x[3]) << 32);
+  uint64_t x3 = 0, x4 = 0;
+  uint64_t y1 = uint64_t(y[0]) | (uint64_t(y[1]) << 32);
+  uint64_t y2 = uint64_t(y[2]) | (uint64_t(y[3]) << 32);
+  uint64_t y3 = 0, y4 = 0;
+
+  uint128_t xy11 = (uint128_t) x1 * y1;
+  uint128_t xy22 = (uint128_t) x2 * y2;
+  uint128_t xy33 = (uint128_t) x3 * y3;
+  uint64_t xy14 = x1 * y4 + x4 * y1;
+  uint64_t xy23 = (x3 - x2)*(y2 - y3);
+
+  uint64_t carry;
+
+  uint128_t t1 = xy11;
+  uint128_t t2 = fastermul65(x1, x2, y1, y2, &carry);
+  uint128_t t3 = fastermul65(x1, x3, y1, y3) + xy11 + xy22 + xy33 + (t2 >> 64);
+  uint64_t t4 = xy14 + xy23 + xy22 + xy33 + carry;
+
+  t2 = (uint64_t) t2;
+  t2 += t1 >> 64;
+  t3 += t2 >> 64;
+
+  t2 = (uint64_t) t2;
+  t2 += xy11;
+  t3 += t2 >> 64;
+
+  t2 = (uint64_t) t2;
+  t2 += xy22;
+  t3 += t2 >> 64;
+
+  result[0] = uint32_t(t1);
+  result[1] = uint32_t(t1 >> 32);
+  result[2] = uint32_t(t2);
+  result[3] = uint32_t(t2 >> 32);
+
+  uint128_t high = t3 + ((uint128_t) t4 << 64);
+  result[4] = uint32_t(high);
+  result[5] = uint32_t(high >> 32);
+  result[6] = uint32_t(high >> 64);
+  result[7] = uint32_t(high >> 96);
+}
 
 class fnvIterative {
   static const uint64_t FNV_64_PRIME = 0x100000001b3ULL;
@@ -75,7 +145,7 @@ public:
 // result.
 bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
                        uint64_t chainHash) {
-  //assert(NLIMBS == 4 * 2);
+  // assert(NLIMBS == 4 * 2);
 
   // The value x is 8 words long (8*32 bits in total)
   // We build (MSB to LSB) as  [ chainHash ; roundSalt ; roundId ; index ]
@@ -92,7 +162,7 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
   for (unsigned j = 0; j < pParams->hashSteps; j++) {
     bigint_t tmp;
     // tmp=lo(x)*c;
-    wide_mul(4, tmp.limbs + 4, tmp.limbs, x.limbs, pParams->c);
+    fasterMul128(tmp.limbs, x.limbs, pParams -> c);
     // [carry,lo(x)] = lo(tmp)+hi(x)
     uint32_t carry = wide_add(4, x.limbs, tmp.limbs, x.limbs + 4);
     // hi(x) = hi(tmp) + carry
@@ -100,7 +170,6 @@ bigint_t PoolHashMiner(const Packet_ServerBeginRound *pParams, uint32_t index,
   }
   return x;
 }
-
 };
 
 #endif
