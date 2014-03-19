@@ -181,6 +181,10 @@ class EndpointMiner : public EndpointClient
     Log(Log_Verbose, "Stamp before metapt gen"); //TODO
 
     // done with offset search
+    //////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////
 
     struct metapoint_top
     {
@@ -270,6 +274,16 @@ class EndpointMiner : public EndpointClient
     // fprintf(stderr, "--------\n\n");
     Log(Log_Fatal, "Finished metasearch");
 
+    Log(Log_Info, "Maxindices: %u", roundInfo->maxIndices);
+    uint32_t maxidx = roundInfo->maxIndices;
+    uint32_t lg2idx = 0;
+    while (maxidx != 0){
+      maxidx >>=1;
+      lg2idx++;
+    }
+    lg2idx -=1;
+    Log(Log_Info, "Log: %u", lg2idx);
+      
     ///////////////////////////////////////////
 
     double t1 = now() * 1e-9;
