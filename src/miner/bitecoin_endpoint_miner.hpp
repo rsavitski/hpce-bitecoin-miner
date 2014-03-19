@@ -169,9 +169,6 @@ class EndpointMiner : public EndpointClient
     Log(Log_Fatal, "Best diff: %016" PRIx64 "", best_diff);
     Log(Log_Fatal, "Best offset: %8x", best_offset);
 
-    // while (1)
-    //  ;
-
     struct metapoint_top
     {
       uint64_t msdw;  // 2 most significant word (MSW followed by 2nd MSW)
@@ -188,7 +185,8 @@ class EndpointMiner : public EndpointClient
     };
 
     // metapoint vector
-    const unsigned metaptvct_sz = 1 << 17;
+    const unsigned metaptvct_sz =
+        1 << 18;  // TODO: autotune, maybe golden diff finder too
     std::vector<metapoint_top> metapts;
 
     std::uniform_int_distribution<uint32_t> dis2(0, 0xFFFFFFFE - best_offset);
@@ -210,7 +208,6 @@ class EndpointMiner : public EndpointClient
       pt.indx = id;
       pt.msdw = uint64_t(msw2) | (uint64_t(msw) << 32);
       pt.tdw = uint64_t(msw4) | (uint64_t(msw3) << 32);
-      //pt.tdw = msw3;
 
       metapts.push_back(pt);
     }
@@ -243,7 +240,8 @@ class EndpointMiner : public EndpointClient
       uint32_t curr_indx = it->indx;
       uint32_t next_indx = (it + 1)->indx;
 
-      if (curr_indx == next_indx) {
+      if (curr_indx == next_indx || curr_indx + best_offset == next_indx ||
+          next_indx + best_offset == curr_indx) {
         Log(Log_Verbose,
             "Skipped identical index sample in second pass search");
         continue;
@@ -262,12 +260,12 @@ class EndpointMiner : public EndpointClient
       }
     }
 
-    //fprintf(stderr, "--------\n\n");
-    //fprintf(stderr, "idx : %8x\n", metaidx[0]);
-    //fprintf(stderr, "idx : %8x\n", metaidx[1]);
-    //fprintf(stderr, "msdw: %016" PRIx64 "\n", mbest_diff.msdw);
-    //fprintf(stderr, "tdw: %8x\n", mbest_diff.tdw);
-    //fprintf(stderr, "--------\n\n");
+    // fprintf(stderr, "--------\n\n");
+    // fprintf(stderr, "idx : %8x\n", metaidx[0]);
+    // fprintf(stderr, "idx : %8x\n", metaidx[1]);
+    // fprintf(stderr, "msdw: %016" PRIx64 "\n", mbest_diff.msdw);
+    // fprintf(stderr, "tdw: %8x\n", mbest_diff.tdw);
+    // fprintf(stderr, "--------\n\n");
     Log(Log_Fatal, "Finished metasearch");
 
     ///////////////////////////////////////////
@@ -280,8 +278,7 @@ class EndpointMiner : public EndpointClient
 
       Log(Log_Debug, "Trial %d.", nTrials);
 
-
-      //TODO
+      // TODO
 
       double t = now() * 1e-9;  // Work out where we are against the deadline
       double timeBudget = tFinish - t;
@@ -310,7 +307,7 @@ class EndpointMiner : public EndpointClient
 
     double score = wide_as_double(BIGINT_WORDS, proof.limbs);
     double leadingzeros = 256 - log(score) * 1.44269504088896340736;
-        Log(Log_Info, "score=%lg, leading zeros=%lg.", score, leadingzeros);
+    Log(Log_Info, "score=%lg, leading zeros=%lg.", score, leadingzeros);
 
     std::sort(bestSolution.begin(), bestSolution.end());
 
