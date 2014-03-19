@@ -169,18 +169,22 @@ class EndpointMiner : public EndpointClient
     Log(Log_Fatal, "Best diff: %016" PRIx64 "", best_diff);
     Log(Log_Fatal, "Best offset: %8x", best_offset);
 
+    pts.clear();
+
     struct metapoint_top
     {
-      uint64_t msdw;  // 2 most significant word (MSW followed by 2nd MSW)
-      uint64_t tdw;   // 3rd, 4th MS words
+      bigint_t point;
+      //uint64_t msdw;  // 2 most significant word (MSW followed by 2nd MSW)
+      //uint64_t tdw;   // 3rd, 4th MS words
       uint32_t indx;  // base index
 
       bool operator<(metapoint_top const &other) const
       {
-        if (msdw == other.msdw) {
-          return tdw < other.tdw;
-        } else
-          return msdw < other.msdw;
+      //  if (msdw == other.msdw) {
+      //    return tdw < other.tdw;
+      //  } else
+      //    return msdw < other.msdw;
+          return wide_compare(BIGINT_WORDS, point.limbs, other.point.limbs) < 0;
       }
     };
 
@@ -200,14 +204,18 @@ class EndpointMiner : public EndpointClient
       bigint_t temphash2 =
           PoolHashMiner(roundInfo.get(), id + best_offset, chainHash);
 
-      uint32_t msw = temphash.limbs[7] ^ temphash2.limbs[7];
-      uint32_t msw2 = temphash.limbs[6] ^ temphash2.limbs[6];
-      uint32_t msw3 = temphash.limbs[5] ^ temphash2.limbs[5];
-      uint32_t msw4 = temphash.limbs[4] ^ temphash2.limbs[4];
+
+      //uint32_t msw = temphash.limbs[7] ^ temphash2.limbs[7];
+      //uint32_t msw2 = temphash.limbs[6] ^ temphash2.limbs[6];
+      //uint32_t msw3 = temphash.limbs[5] ^ temphash2.limbs[5];
+      //uint32_t msw4 = temphash.limbs[4] ^ temphash2.limbs[4];
+
+      
+      wide_xor(8, pt.point.limbs, temphash.limbs, temphash2.limbs);
 
       pt.indx = id;
-      pt.msdw = uint64_t(msw2) | (uint64_t(msw) << 32);
-      pt.tdw = uint64_t(msw4) | (uint64_t(msw3) << 32);
+      //pt.msdw = uint64_t(msw2) | (uint64_t(msw) << 32);
+      //pt.tdw = uint64_t(msw4) | (uint64_t(msw3) << 32);
 
       metapts.push_back(pt);
     }
@@ -230,12 +238,31 @@ class EndpointMiner : public EndpointClient
     //}
     // fprintf(stderr, "--------\n\n");
 
-    metapoint_top mbest_diff;
-    mbest_diff.msdw = 0xFFFFFFFFFFFFFFFFULL;
-    mbest_diff.tdw = 0xFFFFFFFF;
+    //metapoint_top mbest_diff;
+    //mbest_diff.msdw = 0xFFFFFFFFFFFFFFFFULL;
+    //mbest_diff.tdw = 0xFFFFFFFF;
 
-    uint32_t metaidx[2];
+    
+    struct meta2point_top
+    {
+      bigint_t point;
+      uint32_t indx[2];  // base ind
 
+      bool operator<(meta2point_top const &other) const
+      {
+      //  if (msdw == other.msdw) {
+      //    return tdw < other.tdw;
+      //  } else
+      //    return msdw < other.msdw;
+          return wide_compare(BIGINT_WORDS, point.limbs, other.point.limbs) < 0;
+      }
+    };
+    std::vector<meta2point_top> meta2pts;
+
+    ////////////////////
+
+
+    
     for (auto it = metapts.begin(); it != metapts.end() - 1; ++it) {
       uint32_t curr_indx = it->indx;
       uint32_t next_indx = (it + 1)->indx;
@@ -247,19 +274,30 @@ class EndpointMiner : public EndpointClient
         continue;
       }
 
-      metapoint_top xored;
-      xored.msdw = it->msdw ^ (it + 1)->msdw;
-      xored.tdw = it->tdw ^ (it + 1)->tdw;
+      //metapoint_top xored;
+      //xored.msdw = it->msdw ^ (it + 1)->msdw;
+      //xored.tdw = it->tdw ^ (it + 1)->tdw;
 
-      if (xored < mbest_diff) {
-        // fprintf(stderr, "FOUND better metadiff\n");
+      bigint_t xoredw;
+      wide_xor(8, xoredw.limbs, it->point.limbs, (it+1)->point.limbs);
 
-        mbest_diff = xored;
-        metaidx[0] = curr_indx;
-        metaidx[1] = next_indx;
-      }
+      meta2point_top temp;
+      temp.indx[0] = curr_indx;
+      temp.indx[1] = next_indx;
+      temp.point = xoredw;
+
+      meta2pts.push_back(temp);
+
+     // if (wide_compare(BIGINT_WORDS, xoredw.limbs, mbest.limbs) < 0){
+     //// if (xored < mbest_diff) {
+     //   // fprintf(stderr, "FOUND better metadiff\n");
+
+     ////   mbest_diff = xored;
+     //   mbest = xoredw;
+     //   metaidx[0] = curr_indx;
+     //   metaidx[1] = next_indx;
+     // }
     }
-
     // fprintf(stderr, "--------\n\n");
     // fprintf(stderr, "idx : %8x\n", metaidx[0]);
     // fprintf(stderr, "idx : %8x\n", metaidx[1]);
@@ -267,6 +305,42 @@ class EndpointMiner : public EndpointClient
     // fprintf(stderr, "tdw: %8x\n", mbest_diff.tdw);
     // fprintf(stderr, "--------\n\n");
     Log(Log_Fatal, "Finished metasearch");
+    
+    metapts.clear();
+
+    bigint_t mbest;
+    wide_ones(BIGINT_WORDS, mbest.limbs);
+    
+    uint32_t metaidx[4];
+    std::sort(meta2pts.begin(), meta2pts.end());
+    
+    for (auto it = meta2pts.begin(); it != meta2pts.end() - 1; ++it) {
+      bigint_t xoredw;
+      wide_xor(8, xoredw.limbs, it->point.limbs, (it+1)->point.limbs);
+
+
+      if (wide_compare(BIGINT_WORDS, xoredw.limbs, mbest.limbs) < 0){
+        mbest = xoredw;
+        metaidx[0] = it->indx[0];
+        metaidx[1] = it->indx[1];
+        metaidx[2] = (it+1)->indx[0];
+        metaidx[3] = (it+1)->indx[1];
+                 fprintf( stderr, "BEST ::: ");
+                         for (int z=7; z>=0; --z)
+                                     fprintf(stderr, "%8x ", mbest.limbs[z]);
+                                               fprintf(stderr, "\n");
+      }
+    
+    }
+
+     fprintf(stderr, "--------\n\n");
+                 fprintf( stderr, "BEST ::: ");
+                         for (int z=7; z>=0; --z)
+                                     fprintf(stderr, "%8x ", mbest.limbs[z]);
+                                               fprintf(stderr, "\n");
+
+     fprintf(stderr, "--------\n\n");
+
 
     ///////////////////////////////////////////
 
@@ -294,11 +368,19 @@ class EndpointMiner : public EndpointClient
     //    ((double)nTrials * BIN_SIZE * BIN_SIZE * BIN_SIZE) / (t2 - t1));
 
     std::vector<uint32_t> bestSolution;
-    bestSolution.push_back(metaidx[0]);
-    bestSolution.push_back(metaidx[0] + best_offset);
-    bestSolution.push_back(metaidx[1]);
-    bestSolution.push_back(metaidx[1] + best_offset);
-
+    //bestSolution.push_back(metaidx[0]);
+    //bestSolution.push_back(metaidx[0] + best_offset);
+    //bestSolution.push_back(metaidx[1]);
+    //bestSolution.push_back(metaidx[1] + best_offset);
+      bestSolution.push_back( metaidx[0] );
+      bestSolution.push_back(  metaidx[1] );
+       bestSolution.push_back( metaidx[2] );
+       bestSolution.push_back( metaidx[3] );
+      bestSolution.push_back( metaidx[0] + best_offset);
+      bestSolution.push_back(  metaidx[1] + best_offset);
+       bestSolution.push_back( metaidx[2] + best_offset);
+       bestSolution.push_back( metaidx[3] + best_offset);
+       
     bigint_t proof;
     for (auto idx : bestSolution) {
       bigint_t hash = PoolHashMiner(roundInfo.get(), idx, chainHash);
