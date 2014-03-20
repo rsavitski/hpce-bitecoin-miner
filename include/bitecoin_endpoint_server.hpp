@@ -75,7 +75,7 @@ public:
         beginRound->roundId = 0xfa73;//roundId;
         beginRound->roundSalt = 0x7437f2ec;//rand();
         beginRound->chainData.resize(16 + (rand() % 1000));
-        beginRound->maxIndices = 15;
+        beginRound->maxIndices = 16;
         memset(beginRound->c, 0, BIGINT_LENGTH / 2);
         // These are just arbitrary values. The real exchange may choose
         // different ones

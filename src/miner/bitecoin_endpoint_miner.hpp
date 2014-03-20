@@ -13,6 +13,7 @@
 #include <map>
 #include <algorithm>
 #include <set>
+#include <utility>
 
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_endpoint.hpp"
@@ -124,7 +125,7 @@ class EndpointMiner : public EndpointClient
 
     // Log(Log_Verbose, "Stamp after fnv");
 
-    const unsigned ptvct_sz = 1 << 16;
+    const unsigned ptvct_sz = 1 << 17;
 
     Log(Log_Verbose, "Stamp");  // TODO
     // point vector
@@ -267,7 +268,7 @@ class EndpointMiner : public EndpointClient
 
       //if (merge_and_check_uniq(tempvct, it->indices, (it + 1)->indices) == 0) {
       if (merge_and_check_uniq(temp_meta.indices, it->indices, (it + 1)->indices) == 0) {
-        Log(Log_Info, "[***] Skipped identical idx in metapass");
+        Log(Log_Verbose, "[***] Skipped identical idx in metapass");
         continue;
       }
 
@@ -292,16 +293,26 @@ class EndpointMiner : public EndpointClient
 
     /////////////////////////////////////////////////////////////////
     // TODO: consider merging with above, with first outetouter iter being special
+
+    uint32_t maxidx_temp = (roundInfo->maxIndices >= 16) ? 2 : 1;
+    if (roundInfo->maxIndices >= 16){
+      Log(Log_Info, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+      Log(Log_Info, "3 pass");
+      Log(Log_Info, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+    }
+    for (unsigned npass=0; npass<maxidx_temp; ++npass){
+
     std::sort(metaN_fb.begin(), metaN_fb.end());
+    
+    metaN_bb.clear(); //TAG
 
     for (auto it = metaN_fb.begin(); it != metaN_fb.end()-1; ++it){
       if (merge_and_check_uniq(temp_meta.indices, it->indices, (it + 1)->indices) == 0) {
-        Log(Log_Info, "[***] Skipped identical idx in metapass");
-       for (auto item : temp_meta.indices)
-        Log(Log_Info, "thing: %u", item);
+        Log(Log_Verbose, "[***] Skipped identical idx in metapass");
         continue;
       }
       wide_xor(8, temp_meta.point.limbs, it->point.limbs, (it + 1)->point.limbs);
+      metaN_bb.push_back(temp_meta);
 
       if (wide_compare(BIGINT_WORDS, temp_meta.point.limbs, mbest.limbs) < 0) {
         mbest = temp_meta.point;
@@ -314,11 +325,20 @@ class EndpointMiner : public EndpointClient
 
     }
     Log(Log_Info, "Best indices .size(): %zu", best_indices.size());
+    std::swap(metaN_bb, metaN_fb); //TAG
+    }
     /////////////////////////////////////////////////////////////////
 
     Log(Log_Info, "Finished metasearch");
 
     Log(Log_Info, "Maxindices: %u", roundInfo->maxIndices);
+    Log(Log_Info, "Salt: %" PRIx64 "", roundInfo->roundSalt);
+    Log(Log_Info, "c[0]: %x", roundInfo->c[0]);
+    Log(Log_Info, "c[1]: %x", roundInfo->c[1]);
+    Log(Log_Info, "c[2]: %x", roundInfo->c[2]);
+    Log(Log_Info, "c[3]: %x", roundInfo->c[3]);
+    Log(Log_Info, "hashsteps: %u", roundInfo->hashSteps);
+
     uint32_t maxidx = roundInfo->maxIndices;
     uint32_t lg2idx = 0;
     while (maxidx != 0) {
@@ -330,26 +350,26 @@ class EndpointMiner : public EndpointClient
 
     ///////////////////////////////////////////
 
-    double t1 = now() * 1e-9;
-    unsigned nTrials = 0;
-    uint32_t r = 0;
-    while (1) {
-      ++nTrials;
+    //double t1 = now() * 1e-9;
+    //unsigned nTrials = 0;
+    //uint32_t r = 0;
+    //while (1) {
+    //  ++nTrials;
 
-      Log(Log_Debug, "Trial %d.", nTrials);
+    //  Log(Log_Debug, "Trial %d.", nTrials);
 
-      // TODO
+    //  // TODO
 
-      double t = now() * 1e-9;  // Work out where we are against the deadline
-      double timeBudget = tFinish - t;
-      Log(Log_Debug, "Finish trial %d, time remaining =%lg seconds.", nTrials,
-          timeBudget);
+    //  double t = now() * 1e-9;  // Work out where we are against the deadline
+    //  double timeBudget = tFinish - t;
+    //  Log(Log_Debug, "Finish trial %d, time remaining =%lg seconds.", nTrials,
+    //      timeBudget);
 
-      if (timeBudget <= 0)
-        break;  // We have run out of time, send what we have
-    }
-    Log(Log_Info, "nTrials: %u", nTrials);
-    double t2 = now() * 1e-9;
+    //  if (timeBudget <= 0)
+    //    break;  // We have run out of time, send what we have
+    //}
+    //Log(Log_Info, "nTrials: %u", nTrials);
+    //double t2 = now() * 1e-9;
 
     std::vector<uint32_t> bestSolution(best_indices.begin(),
                                        best_indices.end());
