@@ -202,7 +202,7 @@ public:
       uint32_t next_indx = (it + 1)->indx;
 
       if (curr_indx == next_indx) {
-        Log(Log_Verbose, "Skipped identical index sample in diff finder");
+        Log(Log_Debug, "Skipped identical index sample in diff finder");
         continue;
       }
 
@@ -325,7 +325,7 @@ public:
 
       if (curr_indx == next_indx || curr_indx + best_offset == next_indx ||
           next_indx + best_offset == curr_indx) {
-        Log(Log_Verbose,
+        Log(Log_Debug,
             "Skipped identical index sample in second pass search");
         continue;
       }
