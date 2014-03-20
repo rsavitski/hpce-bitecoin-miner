@@ -254,23 +254,30 @@ public:
     queue.enqueueWriteBuffer(cBuffer, CL_FALSE, 0, 4 * sizeof(uint32_t),
                              roundInfo.get()->c, nullptr, &copyEvents[0]);
     queue.enqueueWriteBuffer(pass2Indices, CL_FALSE, 0,
-                             pass2Size * sizeof(uint32_t), pass2Index, nullptr, &copyEvents[1]);
+                             pass2Size * sizeof(uint32_t), pass2Index, nullptr,
+                             &copyEvents[1]);
 
-	cl::NDRange offset(0);               // Always start iterations at x=0, y=0
-	cl::NDRange globalSize(pass2Size);   // Global size must match the original loops
-	cl::NDRange localSize=cl::NullRange;    // We don't care about local size
+    cl::NDRange offset(0); // Always start iterations at x=0, y=0
+    cl::NDRange globalSize(
+        pass2Size); // Global size must match the original loops
+    cl::NDRange localSize = cl::NullRange; // We don't care about local size
 
-	pass2Kernel.setArg(4, cl_uint(roundInfo.get() -> roundId));
-	pass2Kernel.setArg(5, cl_uint(roundInfo.get() -> roundSalt));
-	pass2Kernel.setArg(6, cl_uint(chainHash));
-	pass2Kernel.setArg(7, cl_uint(roundInfo.get() -> hashSteps));
-	pass2Kernel.setArg(8, cl_uint(best_offset));
+    pass2Kernel.setArg(4, cl_uint(roundInfo.get()->roundId));
+    pass2Kernel.setArg(5, cl_uint(roundInfo.get()->roundSalt));
+    pass2Kernel.setArg(6, cl_uint(chainHash));
+    pass2Kernel.setArg(7, cl_uint(roundInfo.get()->hashSteps));
+    pass2Kernel.setArg(8, cl_uint(best_offset));
 
     std::vector<cl::Event> kernelExecution(1);
 
-	queue.enqueueNDRangeKernel(pass2Kernel, offset, globalSize, localSize, &copyEvents, &kernelExecution[0]);
-    queue.enqueueReadBuffer(pass2Word1, CL_TRUE, 0, pass2Size * sizeof(uint64_t), pass2MSW, &kernelExecution);
-    queue.enqueueReadBuffer(pass2Word2, CL_TRUE, 0, pass2Size * sizeof(uint64_t), pass2TW, &kernelExecution);
+    queue.enqueueNDRangeKernel(pass2Kernel, offset, globalSize, localSize,
+                               &copyEvents, &kernelExecution[0]);
+    queue.enqueueReadBuffer(pass2Word1, CL_TRUE, 0,
+                            pass2Size * sizeof(uint64_t), pass2MSW,
+                            &kernelExecution);
+    queue.enqueueReadBuffer(pass2Word2, CL_TRUE, 0,
+                            pass2Size * sizeof(uint64_t), pass2TW,
+                            &kernelExecution);
 
     // tbb::parallel_for(0u, pass2Size, [&](unsigned i) {
     //   bigint_t temphash =
@@ -287,7 +294,7 @@ public:
     //   pass2TW[i] = uint64_t(msw4) | (uint64_t(msw3) << 32);
     // });
     t2 = now() * 1e-9;
-    Log(Log_Info, "Time taken %lf", t2 - t1);
+    Log(Log_Info, "CL Time taken %lf", t2 - t1);
     // fprintf(stderr, "--------\n\n");
     // for (auto pt : metapts) {
     //  fprintf(stderr, "idx : %8x\n", pt.indx);
@@ -295,6 +302,7 @@ public:
     //  fprintf(stderr, "tdw: %8x\n", pt.tdw);
     //}
     // fprintf(stderr, "--------\n\n");
+    t1 = now() * 1e-9;
 
     std::sort(pass2Pairing, pass2Pairing + pass2Size,
               [&](const uint32_t &a, const uint32_t &b) {
@@ -325,8 +333,7 @@ public:
 
       if (curr_indx == next_indx || curr_indx + best_offset == next_indx ||
           next_indx + best_offset == curr_indx) {
-        Log(Log_Debug,
-            "Skipped identical index sample in second pass search");
+        Log(Log_Debug, "Skipped identical index sample in second pass search");
         continue;
       }
 
@@ -342,7 +349,8 @@ public:
         metaidx[1] = next_indx;
       }
     }
-
+    t2 = now() * 1e-9;
+    Log(Log_Info, "Reduction Time taken %lf", t2 - t1);
     // fprintf(stderr, "--------\n\n");
     // fprintf(stderr, "idx : %8x\n", metaidx[0]);
     // fprintf(stderr, "idx : %8x\n", metaidx[1]);
