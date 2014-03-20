@@ -1,6 +1,8 @@
 #ifndef bitecoin_miner_endpoint_hpp
 #define bitecoin_miner_endpoint_hpp
 
+#define TBB
+
 #include <cstdarg>
 #include <cstdint>
 #include <cstdlib>
@@ -14,25 +16,32 @@
 #include <algorithm>
 #include <set>
 #include <utility>
+#include <functional>
+
+#define __CL_ENABLE_EXCEPTIONS
+#include "CL/cl.hpp"
+
+#ifdef TBB
+#include "tbb/parallel_sort.h"
+#endif
 
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_endpoint.hpp"
 #include "bitecoin_endpoint_client.hpp"
 #include "bitecoin_hashing_miner.hpp"
+#include "cl_boilerplate.hpp"
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 #include <cstdio>
 
-namespace bitecoin
-{
+namespace bitecoin {
 
 // merge step of two sorted vectors into a third with additional check of
 // uniqueness of all values (important for point fold uniqueness checks)
 // returns 0 if identical elements were found
 int merge_and_check_uniq(std::vector<uint32_t> &res, std::vector<uint32_t> &v1,
-                         std::vector<uint32_t> &v2)
-{
+                         std::vector<uint32_t> &v2) {
   res.clear();
   auto it1 = v1.begin();
   auto it2 = v2.begin();
@@ -44,7 +53,7 @@ int merge_and_check_uniq(std::vector<uint32_t> &res, std::vector<uint32_t> &v1,
     } else if (*it2 < *it1) {
       res.push_back(*it2++);
     } else
-      return 0;  // found identical element, will skip pair
+      return 0; // found identical element, will skip pair
   }
   while (it1 != v1.end())
     res.push_back(*it1++);
@@ -54,41 +63,81 @@ int merge_and_check_uniq(std::vector<uint32_t> &res, std::vector<uint32_t> &v1,
   return 1;
 };
 
-class EndpointMiner : public EndpointClient
-{
- private:
+class EndpointMiner : public EndpointClient {
+private:
   EndpointMiner(EndpointMiner &) = delete;
   void operator=(const EndpointMiner &) = delete;
 
   unsigned m_knownRounds;
   std::map<std::string, unsigned> m_knownCoins;
 
- public:
+  // OpenCL Context
+  std::vector<cl::Platform> platforms;
+  std::vector<cl::Device> devices;
+  cl::Device device;
+  cl::Context context;
+  cl::Program program;
+  cl::CommandQueue queue;
+
+  cl::Buffer cBuffer;
+
+  cl::Kernel pass2Kernel;
+  cl::Buffer pass2Hashes, pass2Indices;
+
+  unsigned pass2Size = 1 << 22;
+  uint32_t *pass2Hash;
+  uint32_t *pass2Index; // base index
+  uint32_t *pass2Pairing;
+
+public:
   EndpointMiner(std::string clientId, std::string minerId,
                 std::unique_ptr<Connection> &conn, std::shared_ptr<ILog> &log)
-      : EndpointClient(clientId, minerId, conn, log)
-  {
+      : EndpointClient(clientId, minerId, conn, log) {
+
+    program = setupOpenCL(platforms, devices, device, context, log);
+    queue = cl::CommandQueue(context, device);
+
+    cBuffer = cl::Buffer(context, CL_MEM_READ_ONLY, 4 * sizeof(uint32_t));
+
+    pass2Kernel = cl::Kernel(program, "poolhash_pair_tophalf");
+    pass2Hashes = cl::Buffer(context, CL_MEM_WRITE_ONLY,
+                             pass2Size * sizeof(uint32_t) * 8);
+    pass2Indices =
+        cl::Buffer(context, CL_MEM_READ_ONLY, pass2Size * sizeof(uint32_t));
+
+    pass2Kernel.setArg(0, pass2Indices);
+    pass2Kernel.setArg(1, pass2Hashes);
+    pass2Kernel.setArg(2, cBuffer);
+
+    pass2Hash = new uint32_t[pass2Size * 8]();
+    pass2Index = new uint32_t[pass2Size]();
+    pass2Pairing = new uint32_t[pass2Size]();
+  }
+
+  ~EndpointMiner() {
+    delete[] pass2Hash;
+    delete[] pass2Index;
+    delete[] pass2Pairing;
   }
 
   virtual void MakeBid(
-      const std::shared_ptr<Packet_ServerBeginRound> roundInfo,  // Information
-                                                                 // about this
-                                                                 // particular
-                                                                 // round
-      const std::shared_ptr<Packet_ServerRequestBid> request,    // The specific
-                                                                 // request we
-                                                                 // received
-      double period,        // How long this bidding period will last
-      double skewEstimate,  // An estimate of the time difference between us and
-                            // the server (positive -> we are ahead)
-      std::vector<uint32_t> &solution,  // Our vector of indices describing the
-                                        // solution
-      uint32_t *pProof  // Will contain the "proof", which is just the value
-      )
-  {
+      const std::shared_ptr<Packet_ServerBeginRound> roundInfo, // Information
+                                                                // about this
+                                                                // particular
+                                                                // round
+      const std::shared_ptr<Packet_ServerRequestBid> request,   // The specific
+                                                                // request we
+                                                                // received
+      double period,       // How long this bidding period will last
+      double skewEstimate, // An estimate of the time difference between us and
+                           // the server (positive -> we are ahead)
+      std::vector<uint32_t> &solution, // Our vector of indices describing the
+                                       // solution
+      uint32_t *pProof // Will contain the "proof", which is just the value
+      ) {
     double tSafetyMargin =
-        0.5;               // accounts for uncertainty in network conditions
-    tSafetyMargin += 0.3;  // from binning //TODO
+        0.5;              // accounts for uncertainty in network conditions
+    tSafetyMargin += 0.3; // from binning //TODO
 
     double tFinish =
         request->timeStampReceiveBids * 1e-9 + skewEstimate - tSafetyMargin;
@@ -110,8 +159,7 @@ class EndpointMiner : public EndpointClient
 
     //////////////////////////////////////////////////////////
 
-    struct point_top
-    {
+    struct point_top {
       uint64_t msdw;
       uint32_t indx;
 
@@ -173,14 +221,14 @@ class EndpointMiner : public EndpointClient
                                               : next_indx - curr_indx;
       }
     }
-    Log(Log_Info, "Best diff: %016" PRIx64 "", best_diff);
+    Log(Log_Info, "Best diff: %016 PRIx64", best_diff);
     Log(Log_Info, "Best offset: %8x", best_offset);
 
     pts.clear();
 
     t2 = now() * 1e-9;
     Log(Log_Info, "<x> hashsteps: %u", roundInfo->hashSteps);
-    Log(Log_Info, "[=] total diff_find : %lg", t2 - t1);  // TODO
+    Log(Log_Info, "[=] total diff_find : %lg", t2 - t1); // TODO
 
     // done with offset search
 
@@ -188,54 +236,74 @@ class EndpointMiner : public EndpointClient
 
     t1 = now() * 1e-9;
 
-    struct metapoint
-    {
+    struct metapoint {
       bigint_t point;
       std::vector<uint32_t> indices;
 
-      bool operator<(metapoint const &other) const
-      {
+      bool operator<(metapoint const &other) const {
         return wide_compare(BIGINT_WORDS, point.limbs, other.point.limbs) < 0;
       }
     };
 
     // metapoint vector
     const unsigned metaptvct_sz =
-        1 << 18;  // TODO: autotune, maybe golden diff finder too
-    std::vector<metapoint> metapts;
+        1 << 18; // TODO: autotune, maybe golden diff finder too
 
-    std::vector<metapoint> metaN_fb;  // front buffer
-    std::vector<metapoint> metaN_bb;  // back buffer
+    std::vector<metapoint> metaN_fb; // front buffer
+    std::vector<metapoint> metaN_bb; // back buffer
 
     std::uniform_int_distribution<uint32_t> dis2(0, 0xFFFFFFFE - best_offset);
 
     // generate metapoint vector
-    for (unsigned i = 0; i < metaptvct_sz; ++i) {
-      uint32_t id = dis2(gen);
-      uint32_t id2 = id + best_offset;
-      metapoint pt;
-
-      bigint_t temphash = PoolHashMiner(roundInfo.get(), id, chainHash);
-      bigint_t temphash2 = PoolHashMiner(roundInfo.get(), id2, chainHash);
-
-      wide_xor(8, pt.point.limbs, temphash.limbs, temphash2.limbs);
-      pt.indices.push_back(id);
-      pt.indices.push_back(id2);
-
-      metapts.push_back(pt);
+    for (unsigned i = 0; i < pass2Size; ++i) {
+      pass2Index[i] = dis2(gen);
+      // uint32_t id2 = id + best_offset;
+      pass2Pairing[i] = i;
     }
+    // OpenCL Time
+    std::vector<cl::Event> copyEvents(2);
+    queue.enqueueWriteBuffer(cBuffer, CL_FALSE, 0, 4 * sizeof(uint32_t),
+                             roundInfo.get()->c, nullptr, &copyEvents[0]);
+    queue.enqueueWriteBuffer(pass2Indices, CL_FALSE, 0,
+                             pass2Size * sizeof(uint32_t), pass2Index, nullptr,
+                             &copyEvents[1]);
 
+    cl::NDRange offset(0); // Always start iterations at x=0, y=0
+    cl::NDRange globalSize(
+        pass2Size); // Global size must match the original loops
+    cl::NDRange localSize = cl::NullRange; // We don't care about local size
+
+    pass2Kernel.setArg(3, cl_uint(roundInfo.get()->roundId));
+    pass2Kernel.setArg(4, cl_uint(roundInfo.get()->roundSalt));
+    pass2Kernel.setArg(5, cl_uint(chainHash));
+    pass2Kernel.setArg(6, cl_uint(roundInfo.get()->hashSteps));
+    pass2Kernel.setArg(7, cl_uint(best_offset));
+
+    std::vector<cl::Event> kernelExecution(1);
+
+    queue.enqueueNDRangeKernel(pass2Kernel, offset, globalSize, localSize,
+                               &copyEvents, &kernelExecution[0]);
+    queue.enqueueReadBuffer(pass2Hashes, CL_TRUE, 0,
+                            pass2Size * sizeof(uint32_t) * 8, pass2Hash,
+                            &kernelExecution);
     //////////////////////////////////////////////////////////
 
     t2 = now() * 1e-9;
-    Log(Log_Info, "[=] metapt gen : %lg", t2 - t1);  // TODO
+    Log(Log_Info, "[=] metapt gen : %lg", t2 - t1); // TODO
 
     t1 = now() * 1e-9;
 
-    std::sort(metapts.begin(), metapts.end());
+    auto comparer = [&](const uint32_t &a, const uint32_t &b) {
+      return wide_compare(8, pass2Hash + (a * 8), pass2Hash + (b * 8)) == -1;
+    };
 
+#ifdef TBB
+    tbb::parallel_sort(pass2Pairing, pass2Pairing + pass2Size, comparer);
+#else
+    std::sort(pass2Pairing, pass2Pairing + pass2Size, comparer);
+#endif
     t2 = now() * 1e-9;
-    Log(Log_Info, "[=] metapt sort : %lg", t2 - t1);  // TODO
+    Log(Log_Info, "[=] metapt sort : %lg", t2 - t1); // TODO
 
     //////////////////////////////////////////////////////////
 
@@ -246,18 +314,20 @@ class EndpointMiner : public EndpointClient
     t1 = now() * 1e-9;
 
     metapoint temp_meta;
-    for (auto it = metapts.begin(); it != metapts.end() - 1; ++it) {
+    for (unsigned i = 0; i < pass2Size - 1; ++i) {
+      std::vector<uint32_t> a(2), b(2);
+      a[0] = pass2Index[pass2Pairing[i]];
+      a[1] = a[0] + best_offset;
 
-      // if (merge_and_check_uniq(tempvct, it->indices, (it + 1)->indices) == 0)
-      // {
-      if (merge_and_check_uniq(temp_meta.indices, it->indices,
-                               (it + 1)->indices) == 0) {
+      b[0] = pass2Index[pass2Pairing[i + 1]];
+      b[1] = b[0] + best_offset;
+      if (merge_and_check_uniq(temp_meta.indices, a, b) == 0) {
         Log(Log_Verbose, "[*] Skipped identical idx in metapass");
         continue;
       }
 
-      wide_xor(8, temp_meta.point.limbs, it->point.limbs,
-               (it + 1)->point.limbs);
+      wide_xor(8, temp_meta.point.limbs, pass2Hash + (pass2Pairing[i] * 8),
+               pass2Hash + (pass2Pairing[i + 1] * 8));
       metaN_fb.push_back(temp_meta);
 
       // bigint_t xoredw;
@@ -279,7 +349,7 @@ class EndpointMiner : public EndpointClient
     // 4 indices per metapt at this time
 
     t2 = now() * 1e-9;
-    Log(Log_Info, "[=] metapt scan : %lg", t2 - t1);  // TODO
+    Log(Log_Info, "[=] metapt scan : %lg", t2 - t1); // TODO
 
     //////////////////////////////////////////////////////////
 
@@ -295,8 +365,7 @@ class EndpointMiner : public EndpointClient
     Log(Log_Info, "Log2_index: %u", lg2idx);
 
     if (lg2idx <= 2) {
-      throw std::runtime_error(
-          "TODO: less than 2 metapasses required");  // TODO
+      throw std::runtime_error("TODO: less than 2 metapasses required"); // TODO
     }
 
     uint32_t metaN_passes = lg2idx - 2;
@@ -310,10 +379,10 @@ class EndpointMiner : public EndpointClient
       std::sort(metaN_fb.begin(), metaN_fb.end());
 
       t2 = now() * 1e-9;
-      Log(Log_Info, "[=] meta[%u] sort : %lg", npass, t2 - t1);  // TODO
+      Log(Log_Info, "[=] meta[%u] sort : %lg", npass, t2 - t1); // TODO
       t1 = now() * 1e-9;
 
-      metaN_bb.clear();  // TAG
+      metaN_bb.clear(); // TAG
 
       for (auto it = metaN_fb.begin(); it != metaN_fb.end() - 1; ++it) {
         if (merge_and_check_uniq(temp_meta.indices, it->indices,
@@ -336,9 +405,9 @@ class EndpointMiner : public EndpointClient
         }
       }
       Log(Log_Info, "Best indices .size(): %zu", best_indices.size());
-      std::swap(metaN_bb, metaN_fb);  // TAG
+      std::swap(metaN_bb, metaN_fb); // TAG
       t2 = now() * 1e-9;
-      Log(Log_Info, "[=] meta[%u] scan : %lg", npass, t2 - t1);  // TODO
+      Log(Log_Info, "[=] meta[%u] scan : %lg", npass, t2 - t1); // TODO
     }
 
     //////////////////////////////////////////////////////////
@@ -383,6 +452,6 @@ class EndpointMiner : public EndpointClient
   }
 };
 
-};  // bitecoin
+}; // bitecoin
 
 #endif
