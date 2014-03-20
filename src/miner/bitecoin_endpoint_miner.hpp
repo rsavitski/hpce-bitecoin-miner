@@ -44,6 +44,12 @@ private:
   cl::Device device;
   cl::Context context;
   cl::Program program;
+  cl::CommandQueue queue;
+
+  cl::Buffer cBuffer;
+
+  cl::Kernel pass2Kernel;
+  cl::Buffer pass2Word1, pass2Word2, pass2Indices;
 
   // Buffers: Approx 1 GB of memory usage now
   unsigned pass2Size = 1 << 24;
@@ -58,6 +64,17 @@ public:
       : EndpointClient(clientId, minerId, conn, log) {
 
     program = setupOpenCL(platforms, devices, device, context, log);
+    queue = cl::CommandQueue(context, device);
+
+    cBuffer = cl::Buffer(context, CL_MEM_READ_ONLY, 4 * sizeof(uint32_t));
+
+    pass2Kernel = cl::Kernel(program, "poolhash_pair_tophalf");
+    pass2Word1 =
+        cl::Buffer(context, CL_MEM_WRITE_ONLY, pass2Size * sizeof(uint64_t));
+    pass2Word2 =
+        cl::Buffer(context, CL_MEM_WRITE_ONLY, pass2Size * sizeof(uint64_t));
+    pass2Indices =
+        cl::Buffer(context, CL_MEM_READ_ONLY, pass2Size * sizeof(uint32_t));
 
     pass2MSW = new uint64_t[pass2Size]();
     pass2TW = new uint64_t[pass2Size]();
@@ -229,20 +246,26 @@ public:
       pass2Pairing[i] = i;
     }
 
-    tbb::parallel_for(0u, pass2Size, [&](unsigned i) {
-      bigint_t temphash =
-          PoolHashMiner(roundInfo.get(), pass2Index[i], chainHash);
-      bigint_t temphash2 = PoolHashMiner(
-          roundInfo.get(), pass2Index[i] + best_offset, chainHash);
+    // OpenCL Time
+    queue.enqueueWriteBuffer(cBuffer, CL_TRUE, 0, 4 * sizeof(uint32_t),
+                             roundInfo.get()->c);
+    queue.enqueueWriteBuffer(pass2Indices, CL_TRUE, 0,
+                             pass2Size * sizeof(uint32_t), pass2Index);
 
-      uint32_t msw = temphash.limbs[7] ^ temphash2.limbs[7];
-      uint32_t msw2 = temphash.limbs[6] ^ temphash2.limbs[6];
-      uint32_t msw3 = temphash.limbs[5] ^ temphash2.limbs[5];
-      uint32_t msw4 = temphash.limbs[4] ^ temphash2.limbs[4];
+    // tbb::parallel_for(0u, pass2Size, [&](unsigned i) {
+    //   bigint_t temphash =
+    //       PoolHashMiner(roundInfo.get(), pass2Index[i], chainHash);
+    //   bigint_t temphash2 = PoolHashMiner(
+    //       roundInfo.get(), pass2Index[i] + best_offset, chainHash);
 
-      pass2MSW[i] = uint64_t(msw2) | (uint64_t(msw) << 32);
-      pass2TW[i] = uint64_t(msw4) | (uint64_t(msw3) << 32);
-    });
+    //   uint32_t msw = temphash.limbs[7] ^ temphash2.limbs[7];
+    //   uint32_t msw2 = temphash.limbs[6] ^ temphash2.limbs[6];
+    //   uint32_t msw3 = temphash.limbs[5] ^ temphash2.limbs[5];
+    //   uint32_t msw4 = temphash.limbs[4] ^ temphash2.limbs[4];
+
+    //   pass2MSW[i] = uint64_t(msw2) | (uint64_t(msw) << 32);
+    //   pass2TW[i] = uint64_t(msw4) | (uint64_t(msw3) << 32);
+    // });
     t2 = now() * 1e-9;
     Log(Log_Info, "Time taken %lf", t2 - t1);
     // fprintf(stderr, "--------\n\n");

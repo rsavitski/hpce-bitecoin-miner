@@ -65,10 +65,10 @@ void wide_mul(uint n, uint *res_hi, uint *res_lo, const uint *a,
 // Kenrl to hash 2 pairs top half
 __kernel void poolhash_pair_tophalf(__global const uint *indices,
                                     __global ulong *word1,
-                                    __global ulong *word2, __global uint *c,
-                                    uint roundId, uint roundSalt,
-                                    uint chainHash, uint hashSteps,
-                                    uint offset) {
+                                    __global ulong *word2,
+                                    __global const uint *c, uint roundId,
+                                    uint roundSalt, uint chainHash,
+                                    uint hashSteps, uint offset) {
   uint i = get_global_id(0);
   uint index = indices[i];
   bigint_t x1;
