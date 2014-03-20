@@ -1,6 +1,8 @@
 #ifndef bitecoin_miner_endpoint_hpp
 #define bitecoin_miner_endpoint_hpp
 
+#define TBB
+
 #include <cstdarg>
 #include <cstdint>
 #include <cstdlib>
@@ -16,7 +18,10 @@
 
 #define __CL_ENABLE_EXCEPTIONS
 #include "CL/cl.hpp"
+
+#ifdef TBB
 #include "tbb/parallel_sort.h"
+#endif
 
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_endpoint.hpp"
@@ -280,20 +285,6 @@ public:
                             pass2Size * sizeof(uint64_t), pass2TW,
                             &kernelExecution);
 
-    // tbb::parallel_for(0u, pass2Size, [&](unsigned i) {
-    //   bigint_t temphash =
-    //       PoolHashMiner(roundInfo.get(), pass2Index[i], chainHash);
-    //   bigint_t temphash2 = PoolHashMiner(
-    //       roundInfo.get(), pass2Index[i] + best_offset, chainHash);
-
-    //   uint32_t msw = temphash.limbs[7] ^ temphash2.limbs[7];
-    //   uint32_t msw2 = temphash.limbs[6] ^ temphash2.limbs[6];
-    //   uint32_t msw3 = temphash.limbs[5] ^ temphash2.limbs[5];
-    //   uint32_t msw4 = temphash.limbs[4] ^ temphash2.limbs[4];
-
-    //   pass2MSW[i] = uint64_t(msw2) | (uint64_t(msw) << 32);
-    //   pass2TW[i] = uint64_t(msw4) | (uint64_t(msw3) << 32);
-    // });
     t2 = now() * 1e-9;
     Log(Log_Info, "CL Time taken %lf", t2 - t1);
     // fprintf(stderr, "--------\n\n");
@@ -305,14 +296,19 @@ public:
     // fprintf(stderr, "--------\n\n");
     t1 = now() * 1e-9;
 
-    tbb::parallel_sort(pass2Pairing, pass2Pairing + pass2Size,
-                       [&](const uint32_t &a, const uint32_t &b) {
+    auto comparer = [&](const uint32_t &a, const uint32_t &b) {
       if (pass2MSW[a] == pass2MSW[b]) {
         return pass2TW[a] < pass2TW[b];
       } else {
         return pass2MSW[a] < pass2MSW[b];
       }
-    });
+    };
+
+#ifdef TBB
+    tbb::parallel_sort(pass2Pairing, pass2Pairing + pass2Size, comparer);
+#else
+    std::sort(pass2Pairing, pass2Pairing + pass2Size, comparer);
+#endif
     t2 = now() * 1e-9;
     Log(Log_Info, "Sort Time taken %lf", t2 - t1);
 

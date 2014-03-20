@@ -178,7 +178,7 @@ void mul_asm(uint *result, const uint *a, __constant uint *b) {
         "r"(a[6]), "r"(a[7]), "r"(b[0]), "r"(b[1]), "r"(b[2]), "r"(b[3]),
         "r"(b[4]), "r"(b[5]), "r"(b[6]), "r"(b[7]));
 }
-// Kenrl to hash 2 pairs top half
+// kernel to hash 2 pairs top half
 __kernel void poolhash_pair_tophalf(__global const uint *indices,
                                     __global ulong *word1,
                                     __global ulong *word2, __constant uint *c,
