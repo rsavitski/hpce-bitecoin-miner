@@ -16,6 +16,7 @@
 
 #define __CL_ENABLE_EXCEPTIONS
 #include "CL/cl.hpp"
+#include "tbb/parallel_sort.h"
 
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_endpoint.hpp"
@@ -304,8 +305,8 @@ public:
     // fprintf(stderr, "--------\n\n");
     t1 = now() * 1e-9;
 
-    std::sort(pass2Pairing, pass2Pairing + pass2Size,
-              [&](const uint32_t &a, const uint32_t &b) {
+    tbb::parallel_sort(pass2Pairing, pass2Pairing + pass2Size,
+                       [&](const uint32_t &a, const uint32_t &b) {
       if (pass2MSW[a] == pass2MSW[b]) {
         return pass2TW[a] < pass2TW[b];
       } else {
