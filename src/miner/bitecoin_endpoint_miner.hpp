@@ -26,30 +26,32 @@
 namespace bitecoin
 {
 
-template <class Set1, class Set2>
-bool is_disjoint(const Set1 &set1, const Set2 &set2)
+// merge step of two sorted vectors into a third with additional check of
+// uniqueness of all values (important for point fold uniqueness checks)
+// returns 0 if identical elements were found
+int merge_and_check_uniq(std::vector<uint32_t> &res, std::vector<uint32_t> &v1,
+                         std::vector<uint32_t> &v2)
 {
-  if (set1.empty() || set2.empty())
-    return true;
+  res.clear();
+  auto it1 = v1.begin();
+  auto it2 = v2.begin();
 
-  typename Set1::const_iterator it1 = set1.begin(), it1End = set1.end();
-  typename Set2::const_iterator it2 = set2.begin(), it2End = set2.end();
-
-  if (*it1 > *set2.rbegin() || *it2 > *set1.rbegin())
-    return true;
-
-  while (it1 != it1End && it2 != it2End) {
-    if (*it1 == *it2)
-      return false;
+  // run of the mill merge loop
+  while (it1 != v1.end() && it2 != v2.end()) {
     if (*it1 < *it2) {
-      it1++;
-    } else {
-      it2++;
-    }
+      res.push_back(*it1++);
+    } else if (*it2 < *it1) {
+      res.push_back(*it2++);
+    } else
+      return 0;  // found identical element, will skip pair
   }
+  while (it1 != v1.end())
+    res.push_back(*it1++);
+  while (it2 != v2.end())
+    res.push_back(*it2++);
 
-  return true;
-}
+  return 1;
+};
 
 class EndpointMiner : public EndpointClient
 {
@@ -216,7 +218,8 @@ class EndpointMiner : public EndpointClient
     {
       bigint_t point;
       // uint32_t indx;  // base index
-      std::set<uint32_t> indices;  // all indices mixed into this bin so far
+      // std::set<uint32_t> indices;  // all indices mixed into this bin so far
+      std::vector<uint32_t> indices;
 
       bool operator<(metapoint const &other) const
       {
@@ -226,7 +229,7 @@ class EndpointMiner : public EndpointClient
 
     // metapoint vector
     const unsigned metaptvct_sz =
-        1 << 19;  // TODO: autotune, maybe golden diff finder too
+        1 << 18;  // TODO: autotune, maybe golden diff finder too
     std::vector<metapoint> metapts;
 
     std::uniform_int_distribution<uint32_t> dis2(0, 0xFFFFFFFE - best_offset);
@@ -242,15 +245,16 @@ class EndpointMiner : public EndpointClient
 
       wide_xor(8, pt.point.limbs, temphash.limbs, temphash2.limbs);
       // pt.indx = id;
-      pt.indices.insert(id);
-      pt.indices.insert(id2);
+      // pt.indices.insert(id);
+      // pt.indices.insert(id2);
+      pt.indices.push_back(id);
+      pt.indices.push_back(id2);
 
       metapts.push_back(pt);
     }
     //////////////////////////////////////////////////////////
 
     Log(Log_Verbose, "Stamp after metapt gen");  // TODO
-
     std::sort(metapts.begin(), metapts.end());
     Log(Log_Verbose, "Stamp: metapts sorted");  // TODO
 
@@ -260,12 +264,14 @@ class EndpointMiner : public EndpointClient
     wide_ones(BIGINT_WORDS, mbest.limbs);
 
     uint32_t metaidx[2];
-    std::set<uint32_t> best_indices;
+    std::vector<uint32_t> best_indices;
 
+    std::vector<uint32_t> tempvct;
     for (auto it = metapts.begin(); it != metapts.end() - 1; ++it) {
 
-      if (is_disjoint(it->indices, (it + 1)->indices) == 0) {
-        Log(Log_Verbose, "[***] Skipped identical index sample in metapoint setup pass");
+      if (merge_and_check_uniq(tempvct, it->indices, (it + 1)->indices) == 0) {
+        Log(Log_Info,
+            "[***] Skipped identical idx in metapass");
         continue;
       }
 
@@ -275,10 +281,14 @@ class EndpointMiner : public EndpointClient
       if (wide_compare(BIGINT_WORDS, xoredw.limbs, mbest.limbs) < 0) {
         mbest = xoredw;
         best_indices.clear();
-        best_indices.insert(it->indices.begin(), it->indices.end());
-        best_indices.insert((it + 1)->indices.begin(), (it + 1)->indices.end());
+        best_indices.insert(best_indices.begin(), it->indices.begin(),
+                            it->indices.end());
+        best_indices.insert(best_indices.begin(), (it + 1)->indices.begin(),
+                            (it + 1)->indices.end());
       }
     }
+    //for (auto item : tempvct)
+    //  Log(Log_Info, "thing: %u", item);
     Log(Log_Verbose, "Stamp");  // TODO
 
     Log(Log_Info, "Finished metasearch");
