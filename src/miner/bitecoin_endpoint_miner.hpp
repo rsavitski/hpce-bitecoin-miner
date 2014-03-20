@@ -52,7 +52,7 @@ private:
   cl::Buffer pass2Word1, pass2Word2, pass2Indices;
 
   // Buffers: Approx 1 GB of memory usage now
-  unsigned pass2Size = 1 << 24;
+  unsigned pass2Size = 1 << 21;
   uint64_t *pass2MSW;   // 2 most significant word (MSW followed by 2nd MSW)
   uint64_t *pass2TW;    // 3rd, 4th MS words
   uint32_t *pass2Index; // base index
