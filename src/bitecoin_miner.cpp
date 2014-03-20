@@ -9,8 +9,6 @@
 #include <unistd.h>
 #include <csignal>
 
-#include "cl_boilerplate.hpp"
-
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "bitecoin_client client_id logLevel connectionType [arg1 "
@@ -38,13 +36,6 @@ int main(int argc, char *argv[]) {
     std::shared_ptr<bitecoin::ILog> logDest =
         std::make_shared<bitecoin::LogDest>(clientId, logLevel);
     logDest->Log(bitecoin::Log_Info, "Created log.");
-
-    std::vector<cl::Platform> platforms;
-    std::vector<cl::Device> devices;
-    cl::Device device;
-    cl::Context context;
-
-    setupOpenCL(platforms, devices, device, context, logDest);
 
     std::unique_ptr<bitecoin::Connection> connection{ bitecoin::OpenConnection(
         spec) };

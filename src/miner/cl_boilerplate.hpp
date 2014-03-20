@@ -27,7 +27,7 @@ std::string loadSource(const char *fileName) {
       std::istreambuf_iterator<char>());
 }
 
-void setupOpenCL(std::vector<cl::Platform> &platforms,
+cl::Program setupOpenCL(std::vector<cl::Platform> &platforms,
                  std::vector<cl::Device> &devices, cl::Device &device,
                  cl::Context &context, std::shared_ptr<ILog> &log) {
   // Initialise OpenCL
@@ -74,7 +74,9 @@ void setupOpenCL(std::vector<cl::Platform> &platforms,
       std::make_pair(kernelSource.c_str(), kernelSource.size() + 1));
   cl::Program program(context, sources);
   try {
+    log->Log(Log_Info, "[OpenCL] Building Kernel");
     program.build(devices);
+    return program;
   }
   catch (...) {
     for (unsigned i = 0; i < devices.size(); i++) {

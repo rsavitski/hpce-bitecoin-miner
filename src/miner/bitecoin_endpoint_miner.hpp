@@ -15,11 +15,14 @@
 #include <functional>
 
 #include "tbb/parallel_for.h"
+#define __CL_ENABLE_EXCEPTIONS
+#include "CL/cl.hpp"
 
 #include "bitecoin_protocol.hpp"
 #include "bitecoin_endpoint.hpp"
 #include "bitecoin_endpoint_client.hpp"
 #include "bitecoin_hashing_miner.hpp"
+#include "cl_boilerplate.hpp"
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -35,6 +38,14 @@ private:
   unsigned m_knownRounds;
   std::map<std::string, unsigned> m_knownCoins;
 
+  // OpenCL Context
+  std::vector<cl::Platform> platforms;
+  std::vector<cl::Device> devices;
+  cl::Device device;
+  cl::Context context;
+  cl::Program program;
+
+  // Buffers: Approx 1 GB of memory usage now
   unsigned pass2Size = 1 << 24;
   uint64_t *pass2MSW;   // 2 most significant word (MSW followed by 2nd MSW)
   uint64_t *pass2TW;    // 3rd, 4th MS words
@@ -45,6 +56,8 @@ public:
   EndpointMiner(std::string clientId, std::string minerId,
                 std::unique_ptr<Connection> &conn, std::shared_ptr<ILog> &log)
       : EndpointClient(clientId, minerId, conn, log) {
+
+    program = setupOpenCL(platforms, devices, device, context, log);
 
     pass2MSW = new uint64_t[pass2Size]();
     pass2TW = new uint64_t[pass2Size]();
@@ -188,7 +201,7 @@ public:
       }
       // fprintf(stderr, "\n");
     }
-    Log(Log_Fatal, "Best diff: %016" PRIx64 "", best_diff);
+    // Log(Log_Fatal, "Best diff: %016" PRIx64 "", best_diff);
     Log(Log_Fatal, "Best offset: %8x", best_offset);
 
     struct metapoint_top {
@@ -242,12 +255,12 @@ public:
 
     std::sort(pass2Pairing, pass2Pairing + pass2Size,
               [&](const uint32_t &a, const uint32_t &b) {
-                if (pass2MSW[a] == pass2MSW[b]) {
-                  return pass2TW[a] < pass2TW[b];
-                } else {
-                  return pass2MSW[a] < pass2MSW[b];
-                }
-              });
+      if (pass2MSW[a] == pass2MSW[b]) {
+        return pass2TW[a] < pass2TW[b];
+      } else {
+        return pass2MSW[a] < pass2MSW[b];
+      }
+    });
 
     // fprintf(stderr, "--------\n\n");
     // for (auto pt : metapts) {
