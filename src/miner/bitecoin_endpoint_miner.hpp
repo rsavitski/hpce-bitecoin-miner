@@ -210,15 +210,10 @@ class EndpointMiner : public EndpointClient
 
     // done with offset search
     //////////////////////////////////////////////////////////
-    //////////////////////////////////////////////////////////
-    //////////////////////////////////////////////////////////
-    //////////////////////////////////////////////////////////
 
     struct metapoint
     {
       bigint_t point;
-      // uint32_t indx;  // base index
-      // std::set<uint32_t> indices;  // all indices mixed into this bin so far
       std::vector<uint32_t> indices;
 
       bool operator<(metapoint const &other) const
@@ -232,6 +227,9 @@ class EndpointMiner : public EndpointClient
         1 << 18;  // TODO: autotune, maybe golden diff finder too
     std::vector<metapoint> metapts;
 
+    std::vector<metapoint> metaN_fb;  // front buffer
+    std::vector<metapoint> metaN_bb;  // back buffer
+
     std::uniform_int_distribution<uint32_t> dis2(0, 0xFFFFFFFE - best_offset);
 
     // generate metapoint vector
@@ -244,9 +242,6 @@ class EndpointMiner : public EndpointClient
       bigint_t temphash2 = PoolHashMiner(roundInfo.get(), id2, chainHash);
 
       wide_xor(8, pt.point.limbs, temphash.limbs, temphash2.limbs);
-      // pt.indx = id;
-      // pt.indices.insert(id);
-      // pt.indices.insert(id2);
       pt.indices.push_back(id);
       pt.indices.push_back(id2);
 
@@ -262,34 +257,64 @@ class EndpointMiner : public EndpointClient
 
     bigint_t mbest;
     wide_ones(BIGINT_WORDS, mbest.limbs);
-
-    uint32_t metaidx[2];
     std::vector<uint32_t> best_indices;
 
-    std::vector<uint32_t> tempvct;
+    //uint32_t metaidx[2];
+
+    //std::vector<uint32_t> tempvct;
+    metapoint temp_meta;
     for (auto it = metapts.begin(); it != metapts.end() - 1; ++it) {
 
-      if (merge_and_check_uniq(tempvct, it->indices, (it + 1)->indices) == 0) {
-        Log(Log_Info,
-            "[***] Skipped identical idx in metapass");
+      //if (merge_and_check_uniq(tempvct, it->indices, (it + 1)->indices) == 0) {
+      if (merge_and_check_uniq(temp_meta.indices, it->indices, (it + 1)->indices) == 0) {
+        Log(Log_Info, "[***] Skipped identical idx in metapass");
         continue;
       }
 
-      bigint_t xoredw;
-      wide_xor(8, xoredw.limbs, it->point.limbs, (it + 1)->point.limbs);
+      wide_xor(8, temp_meta.point.limbs, it->point.limbs, (it + 1)->point.limbs);
+      metaN_fb.push_back(temp_meta);
+      
+      //bigint_t xoredw;
+      //wide_xor(8, xoredw.limbs, it->point.limbs, (it + 1)->point.limbs);
+      // TODO: retain for maxindices = 4 case
+      //if (wide_compare(BIGINT_WORDS, xoredw.limbs, mbest.limbs) < 0) {
+      //  mbest = xoredw;
+      //  best_indices.clear();
+      //  best_indices.insert(best_indices.begin(), it->indices.begin(),
+      //                      it->indices.end());
+      //  best_indices.insert(best_indices.begin(), (it + 1)->indices.begin(),
+      //                      (it + 1)->indices.end());
+      //}
+    }
+    // for (auto item : tempvct)
+    //  Log(Log_Info, "thing: %u", item);
+    Log(Log_Verbose, "Stamp");  // TODO
 
-      if (wide_compare(BIGINT_WORDS, xoredw.limbs, mbest.limbs) < 0) {
-        mbest = xoredw;
+    /////////////////////////////////////////////////////////////////
+    // TODO: consider merging with above, with first outetouter iter being special
+    std::sort(metaN_fb.begin(), metaN_fb.end());
+
+    for (auto it = metaN_fb.begin(); it != metaN_fb.end()-1; ++it){
+      if (merge_and_check_uniq(temp_meta.indices, it->indices, (it + 1)->indices) == 0) {
+        Log(Log_Info, "[***] Skipped identical idx in metapass");
+       for (auto item : temp_meta.indices)
+        Log(Log_Info, "thing: %u", item);
+        continue;
+      }
+      wide_xor(8, temp_meta.point.limbs, it->point.limbs, (it + 1)->point.limbs);
+
+      if (wide_compare(BIGINT_WORDS, temp_meta.point.limbs, mbest.limbs) < 0) {
+        mbest = temp_meta.point;
         best_indices.clear();
         best_indices.insert(best_indices.begin(), it->indices.begin(),
                             it->indices.end());
         best_indices.insert(best_indices.begin(), (it + 1)->indices.begin(),
                             (it + 1)->indices.end());
       }
+
     }
-    //for (auto item : tempvct)
-    //  Log(Log_Info, "thing: %u", item);
-    Log(Log_Verbose, "Stamp");  // TODO
+    Log(Log_Info, "Best indices .size(): %zu", best_indices.size());
+    /////////////////////////////////////////////////////////////////
 
     Log(Log_Info, "Finished metasearch");
 
@@ -325,15 +350,7 @@ class EndpointMiner : public EndpointClient
     }
     Log(Log_Info, "nTrials: %u", nTrials);
     double t2 = now() * 1e-9;
-    // Log(Log_Info, "Effective hashrate: %lf",
-    //    ((double)nTrials * BIN_SIZE * BIN_SIZE * BIN_SIZE) / (t2 - t1));
 
-    // std::vector<uint32_t> bestSolution;
-    // bestSolution.push_back(metaidx[0]);
-    // bestSolution.push_back(metaidx[0] + best_offset);
-    // bestSolution.push_back(metaidx[1]);
-    // bestSolution.push_back(metaidx[1] + best_offset);
-    // std::vector<double> output(input.begin(), input.end());
     std::vector<uint32_t> bestSolution(best_indices.begin(),
                                        best_indices.end());
 
