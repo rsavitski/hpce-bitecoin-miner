@@ -75,6 +75,11 @@ public:
     pass2Indices =
         cl::Buffer(context, CL_MEM_READ_ONLY, pass2Size * sizeof(uint32_t));
 
+    pass2Kernel.setArg(0, pass2Indices);
+    pass2Kernel.setArg(1, pass2Word1);
+    pass2Kernel.setArg(2, pass2Word2);
+    pass2Kernel.setArg(3, cBuffer);
+
     pass2MSW = new uint64_t[pass2Size]();
     pass2TW = new uint64_t[pass2Size]();
     pass2Index = new uint32_t[pass2Size]();
@@ -160,7 +165,7 @@ public:
       pt.msdw =
           uint64_t(temphash.limbs[6]) | (uint64_t(temphash.limbs[7]) << 32);
 
-      pts.push_back(pt);
+      pts[i] = pt;
 
       // fprintf(stderr, "id: %x\n", id);
       // fprintf(stderr, "before: %8x %8x\n", temphash.limbs[7],
@@ -249,6 +254,21 @@ public:
                              roundInfo.get()->c);
     queue.enqueueWriteBuffer(pass2Indices, CL_TRUE, 0,
                              pass2Size * sizeof(uint32_t), pass2Index);
+
+	cl::NDRange offset(0);               // Always start iterations at x=0, y=0
+	cl::NDRange globalSize(pass2Size);   // Global size must match the original loops
+	cl::NDRange localSize=cl::NullRange;    // We don't care about local size
+
+	pass2Kernel.setArg(4, cl_uint(roundInfo.get() -> roundId));
+	pass2Kernel.setArg(5, cl_uint(roundInfo.get() -> roundSalt));
+	pass2Kernel.setArg(6, cl_uint(chainHash));
+	pass2Kernel.setArg(7, cl_uint(roundInfo.get() -> hashSteps));
+	pass2Kernel.setArg(8, cl_uint(best_offset));
+
+	queue.enqueueNDRangeKernel(pass2Kernel, offset, globalSize, localSize);
+	queue.enqueueBarrier();
+    queue.enqueueReadBuffer(pass2Word1, CL_TRUE, 0, pass2Size * sizeof(uint64_t), pass2MSW);
+    queue.enqueueReadBuffer(pass2Word2, CL_TRUE, 0, pass2Size * sizeof(uint64_t), pass2TW);
 
     // tbb::parallel_for(0u, pass2Size, [&](unsigned i) {
     //   bigint_t temphash =
