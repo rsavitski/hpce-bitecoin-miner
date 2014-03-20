@@ -116,9 +116,6 @@ class EndpointMiner : public EndpointClient
       bool operator<(point_top const &other) const { return msdw < other.msdw; }
     };
 
-    //Log(Log_Verbose, "Stamp after fnv");
-
-
     const unsigned ptvct_sz = 1 << 17;
 
     // point vector
@@ -160,7 +157,7 @@ class EndpointMiner : public EndpointClient
       uint32_t next_indx = (it + 1)->indx;
 
       if (curr_indx == next_indx) {
-        Log(Log_Verbose, "[***] Skipped identical index sample in diff finder");
+        Log(Log_Verbose, "[*] Skipped identical index sample in diff finder");
         continue;
       }
 
@@ -250,7 +247,7 @@ class EndpointMiner : public EndpointClient
       // {
       if (merge_and_check_uniq(temp_meta.indices, it->indices,
                                (it + 1)->indices) == 0) {
-        Log(Log_Verbose, "[***] Skipped identical idx in metapass");
+        Log(Log_Verbose, "[*] Skipped identical idx in metapass");
         continue;
       }
 
@@ -289,7 +286,7 @@ class EndpointMiner : public EndpointClient
       t1 = now() * 1e-9;
 
       std::sort(metaN_fb.begin(), metaN_fb.end());
-      
+
       t2 = now() * 1e-9;
       Log(Log_Info, "[=] meta[%u] sort : %lg", npass, t2 - t1);  // TODO
       t1 = now() * 1e-9;
@@ -299,7 +296,7 @@ class EndpointMiner : public EndpointClient
       for (auto it = metaN_fb.begin(); it != metaN_fb.end() - 1; ++it) {
         if (merge_and_check_uniq(temp_meta.indices, it->indices,
                                  (it + 1)->indices) == 0) {
-          Log(Log_Verbose, "[***] Skipped identical idx in metapass");
+          Log(Log_Verbose, "[*] Skipped identical idx in metapass");
           continue;
         }
         wide_xor(8, temp_meta.point.limbs, it->point.limbs,
