@@ -70,9 +70,6 @@ class EndpointMiner : public EndpointClient
   {
   }
 
-  /* Here is a default implementation of make bid.
-          I would suggest that you override this method as a starting point.
-  */
   virtual void MakeBid(
       const std::shared_ptr<Packet_ServerBeginRound> roundInfo,  // Information
                                                                  // about this
@@ -90,15 +87,13 @@ class EndpointMiner : public EndpointClient
       )
   {
     double tSafetyMargin =
-        0.5;  // accounts for uncertainty in network conditions
-    /* This is when the server has said all bids must be produced by, plus the
-            adjustment for clock skew, and the safety margin
-    */
-
+        0.5;               // accounts for uncertainty in network conditions
     tSafetyMargin += 0.3;  // from binning //TODO
 
     double tFinish =
         request->timeStampReceiveBids * 1e-9 + skewEstimate - tSafetyMargin;
+
+    double t1, t2;
 
     Log(Log_Verbose, "MakeBid - start, total period=%lg.", period);
 
@@ -108,8 +103,6 @@ class EndpointMiner : public EndpointClient
     //    (const char *)&roundInfo->chainData[previousChainSize],
     //    roundInfo->chainData.size() - previousChainSize);
     // previousChainSize = roundInfo->chainData.size();
-
-    Log(Log_Verbose, "Maxindices: %u", roundInfo->maxIndices);
 
     hash::fnv<64> hasher;
     uint64_t chainHash = hasher((const char *)&roundInfo->chainData[0],
@@ -123,11 +116,11 @@ class EndpointMiner : public EndpointClient
       bool operator<(point_top const &other) const { return msdw < other.msdw; }
     };
 
-    // Log(Log_Verbose, "Stamp after fnv");
+    //Log(Log_Verbose, "Stamp after fnv");
+
 
     const unsigned ptvct_sz = 1 << 17;
 
-    Log(Log_Verbose, "Stamp");  // TODO
     // point vector
     std::vector<point_top> pts;
 
@@ -135,6 +128,7 @@ class EndpointMiner : public EndpointClient
     std::minstd_rand gen(rd());
     std::uniform_int_distribution<uint32_t> dis;
 
+    t1 = now() * 1e-9;
     // generate point vector
     for (unsigned i = 0; i < ptvct_sz; ++i) {
       uint32_t id = dis(gen);
@@ -147,30 +141,13 @@ class EndpointMiner : public EndpointClient
           uint64_t(temphash.limbs[6]) | (uint64_t(temphash.limbs[7]) << 32);
 
       pts.push_back(pt);
-
-      // fprintf(stderr, "id: %x\n", id);
-      // fprintf(stderr, "before: %8x %8x\n", temphash.limbs[7],
-      // temphash.limbs[6]);
-      // uint64_t sdh = uint64_t(temphash.limbs[6]) |
-      // (uint64_t(temphash.limbs[7]) << 32);
-      // fprintf(stderr, "after: %8x %8x\n\n", sdh>>32 , sdh & 0xffffFFFF);
     }
 
-    // for (auto pt : pts) {
-    //  fprintf(stderr, "idx : %8x\n", pt.indx);
-    //  fprintf(stderr, "msdw: %" PRIx64 "\n", pt.msdw);
-    //}
-    Log(Log_Verbose, "Stamp");  // TODO
+    /////////////////
 
     std::sort(pts.begin(), pts.end());
 
-    Log(Log_Verbose, "Stamp");  // TODO
-    // fprintf(stderr, "--------\n\n");
-    // for (auto pt : pts) {
-    //  fprintf(stderr, "idx : %8x\n", pt.indx);
-    //  fprintf(stderr, "msdw: %" PRIx64 "\n", pt.msdw);
-    //}
-    // fprintf(stderr, "--------\n\n");
+    //////////////////
 
     uint64_t best_diff = 0xFFFFFFFFFFFFFFFFULL;
     uint32_t best_offset = 0;
@@ -191,26 +168,24 @@ class EndpointMiner : public EndpointClient
       uint64_t diff =
           (curr_dw > next_dw) ? curr_dw - next_dw : next_dw - curr_dw;
 
-      // fprintf(stderr, "msdw_curr: %16" PRIx64 "\n", curr_dw);
-      // fprintf(stderr, "msdw_next: %16" PRIx64 "\n", next_dw);
-      // fprintf(stderr, "diff     : %16" PRIx64 "\n", diff);
-
       if (diff < best_diff) {
         best_diff = diff;
         best_offset = (curr_indx > next_indx) ? curr_indx - next_indx
                                               : next_indx - curr_indx;
-        // fprintf(stderr, "FOUND better diff\n");
       }
-      // fprintf(stderr, "\n");
     }
     Log(Log_Info, "Best diff: %016" PRIx64 "", best_diff);
     Log(Log_Info, "Best offset: %8x", best_offset);
 
     pts.clear();
-    Log(Log_Verbose, "Stamp before metapt gen");  // TODO
+
+    t2 = now() * 1e-9;
+    Log(Log_Info, "<x> hashsteps: %u", roundInfo->hashSteps);
+    Log(Log_Info, "[=] total diff_find : %lg", t2 - t1);  // TODO
 
     // done with offset search
     //////////////////////////////////////////////////////////
+    t1 = now() * 1e-9;
 
     struct metapoint
     {
@@ -250,9 +225,15 @@ class EndpointMiner : public EndpointClient
     }
     //////////////////////////////////////////////////////////
 
-    Log(Log_Verbose, "Stamp after metapt gen");  // TODO
+    t2 = now() * 1e-9;
+    Log(Log_Info, "[=] metapt gen : %lg", t2 - t1);  // TODO
+
+    t1 = now() * 1e-9;
+
     std::sort(metapts.begin(), metapts.end());
-    Log(Log_Verbose, "Stamp: metapts sorted");  // TODO
+
+    t2 = now() * 1e-9;
+    Log(Log_Info, "[=] metapt sort : %lg", t2 - t1);  // TODO
 
     //////////////////////////////////////////////////////////
 
@@ -260,25 +241,27 @@ class EndpointMiner : public EndpointClient
     wide_ones(BIGINT_WORDS, mbest.limbs);
     std::vector<uint32_t> best_indices;
 
-    //uint32_t metaidx[2];
+    t1 = now() * 1e-9;
 
-    //std::vector<uint32_t> tempvct;
     metapoint temp_meta;
     for (auto it = metapts.begin(); it != metapts.end() - 1; ++it) {
 
-      //if (merge_and_check_uniq(tempvct, it->indices, (it + 1)->indices) == 0) {
-      if (merge_and_check_uniq(temp_meta.indices, it->indices, (it + 1)->indices) == 0) {
+      // if (merge_and_check_uniq(tempvct, it->indices, (it + 1)->indices) == 0)
+      // {
+      if (merge_and_check_uniq(temp_meta.indices, it->indices,
+                               (it + 1)->indices) == 0) {
         Log(Log_Verbose, "[***] Skipped identical idx in metapass");
         continue;
       }
 
-      wide_xor(8, temp_meta.point.limbs, it->point.limbs, (it + 1)->point.limbs);
+      wide_xor(8, temp_meta.point.limbs, it->point.limbs,
+               (it + 1)->point.limbs);
       metaN_fb.push_back(temp_meta);
-      
-      //bigint_t xoredw;
-      //wide_xor(8, xoredw.limbs, it->point.limbs, (it + 1)->point.limbs);
+
+      // bigint_t xoredw;
+      // wide_xor(8, xoredw.limbs, it->point.limbs, (it + 1)->point.limbs);
       // TODO: retain for maxindices = 4 case
-      //if (wide_compare(BIGINT_WORDS, xoredw.limbs, mbest.limbs) < 0) {
+      // if (wide_compare(BIGINT_WORDS, xoredw.limbs, mbest.limbs) < 0) {
       //  mbest = xoredw;
       //  best_indices.clear();
       //  best_indices.insert(best_indices.begin(), it->indices.begin(),
@@ -289,54 +272,68 @@ class EndpointMiner : public EndpointClient
     }
     // for (auto item : tempvct)
     //  Log(Log_Info, "thing: %u", item);
-    Log(Log_Verbose, "Stamp");  // TODO
+    // Log(Log_Verbose, "Stamp");  // TODO
 
     /////////////////////////////////////////////////////////////////
-    // TODO: consider merging with above, with first outetouter iter being special
+
+    t2 = now() * 1e-9;
+    Log(Log_Info, "[=] metapt scan : %lg", t2 - t1);  // TODO
 
     uint32_t maxidx_temp = (roundInfo->maxIndices >= 16) ? 2 : 1;
-    if (roundInfo->maxIndices >= 16){
+    if (roundInfo->maxIndices >= 16) {
       Log(Log_Info, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
       Log(Log_Info, "3 pass");
       Log(Log_Info, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
     }
-    for (unsigned npass=0; npass<maxidx_temp; ++npass){
+    for (unsigned npass = 0; npass < maxidx_temp; ++npass) {
+      t1 = now() * 1e-9;
 
-    std::sort(metaN_fb.begin(), metaN_fb.end());
-    
-    metaN_bb.clear(); //TAG
+      std::sort(metaN_fb.begin(), metaN_fb.end());
+      
+      t2 = now() * 1e-9;
+      Log(Log_Info, "[=] meta[%u] sort : %lg", npass, t2 - t1);  // TODO
+      t1 = now() * 1e-9;
 
-    for (auto it = metaN_fb.begin(); it != metaN_fb.end()-1; ++it){
-      if (merge_and_check_uniq(temp_meta.indices, it->indices, (it + 1)->indices) == 0) {
-        Log(Log_Verbose, "[***] Skipped identical idx in metapass");
-        continue;
+      metaN_bb.clear();  // TAG
+
+      for (auto it = metaN_fb.begin(); it != metaN_fb.end() - 1; ++it) {
+        if (merge_and_check_uniq(temp_meta.indices, it->indices,
+                                 (it + 1)->indices) == 0) {
+          Log(Log_Verbose, "[***] Skipped identical idx in metapass");
+          continue;
+        }
+        wide_xor(8, temp_meta.point.limbs, it->point.limbs,
+                 (it + 1)->point.limbs);
+        metaN_bb.push_back(temp_meta);
+
+        if (wide_compare(BIGINT_WORDS, temp_meta.point.limbs, mbest.limbs) <
+            0) {
+          mbest = temp_meta.point;
+          best_indices.clear();
+          best_indices.insert(best_indices.begin(), it->indices.begin(),
+                              it->indices.end());
+          best_indices.insert(best_indices.begin(), (it + 1)->indices.begin(),
+                              (it + 1)->indices.end());
+        }
       }
-      wide_xor(8, temp_meta.point.limbs, it->point.limbs, (it + 1)->point.limbs);
-      metaN_bb.push_back(temp_meta);
-
-      if (wide_compare(BIGINT_WORDS, temp_meta.point.limbs, mbest.limbs) < 0) {
-        mbest = temp_meta.point;
-        best_indices.clear();
-        best_indices.insert(best_indices.begin(), it->indices.begin(),
-                            it->indices.end());
-        best_indices.insert(best_indices.begin(), (it + 1)->indices.begin(),
-                            (it + 1)->indices.end());
-      }
-
-    }
-    Log(Log_Info, "Best indices .size(): %zu", best_indices.size());
-    std::swap(metaN_bb, metaN_fb); //TAG
+      Log(Log_Info, "Best indices .size(): %zu", best_indices.size());
+      std::swap(metaN_bb, metaN_fb);  // TAG
+      t2 = now() * 1e-9;
+      Log(Log_Info, "[=] meta[%u] scan : %lg", npass, t2 - t1);  // TODO
     }
     /////////////////////////////////////////////////////////////////
+
+    // t2 = now() * 1e-9;
+    // Log(Log_Info, "[=] N extra passes : %lg", t2-t1);  // TODO
 
     Log(Log_Info, "Finished metasearch");
 
     Log(Log_Info, "Maxindices: %u", roundInfo->maxIndices);
-    Log(Log_Info, "Salt: %" PRIx64 "", roundInfo->roundSalt);
-    Log(Log_Info, "c[0]: %x", roundInfo->c[0]);
-    Log(Log_Info, "c[1]: %x", roundInfo->c[1]);
-    Log(Log_Info, "c[2]: %x", roundInfo->c[2]);
-    Log(Log_Info, "c[3]: %x", roundInfo->c[3]);
+    // Log(Log_Info, "Salt: %" PRIx64 "", roundInfo->roundSalt);
+    // Log(Log_Info, "c[0]: %x", roundInfo->c[0]);
+    // Log(Log_Info, "c[1]: %x", roundInfo->c[1]);
+    // Log(Log_Info, "c[2]: %x", roundInfo->c[2]);
+    // Log(Log_Info, "c[3]: %x", roundInfo->c[3]);
     Log(Log_Info, "hashsteps: %u", roundInfo->hashSteps);
 
     uint32_t maxidx = roundInfo->maxIndices;
@@ -350,10 +347,9 @@ class EndpointMiner : public EndpointClient
 
     ///////////////////////////////////////////
 
-    //double t1 = now() * 1e-9;
-    //unsigned nTrials = 0;
-    //uint32_t r = 0;
-    //while (1) {
+    // unsigned nTrials = 0;
+    // uint32_t r = 0;
+    // while (1) {
     //  ++nTrials;
 
     //  Log(Log_Debug, "Trial %d.", nTrials);
@@ -368,8 +364,7 @@ class EndpointMiner : public EndpointClient
     //  if (timeBudget <= 0)
     //    break;  // We have run out of time, send what we have
     //}
-    //Log(Log_Info, "nTrials: %u", nTrials);
-    //double t2 = now() * 1e-9;
+    // Log(Log_Info, "nTrials: %u", nTrials);
 
     std::vector<uint32_t> bestSolution(best_indices.begin(),
                                        best_indices.end());

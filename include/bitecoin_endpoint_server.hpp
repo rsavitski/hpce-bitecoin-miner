@@ -92,6 +92,9 @@ public:
         // Again exchange might choose differently
         //beginRound->hashSteps = 16 + rand() % 16;
         beginRound->hashSteps = 23;
+        //static int ttt=0;
+        //beginRound->hashSteps = 10+ttt%20;
+        //ttt++;
 
         Log(Log_Verbose, "Sending chain data.\n");
         SendPacket(beginRound);
