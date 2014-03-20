@@ -108,6 +108,8 @@ class EndpointMiner : public EndpointClient
     uint64_t chainHash = hasher((const char *)&roundInfo->chainData[0],
                                 roundInfo->chainData.size());
 
+    //////////////////////////////////////////////////////////
+
     struct point_top
     {
       uint64_t msdw;
@@ -140,11 +142,11 @@ class EndpointMiner : public EndpointClient
       pts.push_back(pt);
     }
 
-    /////////////////
+    //////////////////////////////////////////////////////////
 
     std::sort(pts.begin(), pts.end());
 
-    //////////////////
+    //////////////////////////////////////////////////////////
 
     uint64_t best_diff = 0xFFFFFFFFFFFFFFFFULL;
     uint32_t best_offset = 0;
@@ -181,7 +183,9 @@ class EndpointMiner : public EndpointClient
     Log(Log_Info, "[=] total diff_find : %lg", t2 - t1);  // TODO
 
     // done with offset search
+
     //////////////////////////////////////////////////////////
+
     t1 = now() * 1e-9;
 
     struct metapoint
@@ -220,6 +224,7 @@ class EndpointMiner : public EndpointClient
 
       metapts.push_back(pt);
     }
+
     //////////////////////////////////////////////////////////
 
     t2 = now() * 1e-9;
@@ -271,18 +276,35 @@ class EndpointMiner : public EndpointClient
     //  Log(Log_Info, "thing: %u", item);
     // Log(Log_Verbose, "Stamp");  // TODO
 
-    /////////////////////////////////////////////////////////////////
+    // 4 indices per metapt at this time
 
     t2 = now() * 1e-9;
     Log(Log_Info, "[=] metapt scan : %lg", t2 - t1);  // TODO
 
-    uint32_t maxidx_temp = (roundInfo->maxIndices >= 16) ? 2 : 1;
-    if (roundInfo->maxIndices >= 16) {
-      Log(Log_Info, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
-      Log(Log_Info, "3 pass");
-      Log(Log_Info, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+    //////////////////////////////////////////////////////////
+
+    Log(Log_Info, "Maxindices: %u", roundInfo->maxIndices);
+    Log(Log_Info, "Hashsteps: %u", roundInfo->hashSteps);
+    uint32_t maxidx = roundInfo->maxIndices;
+    uint32_t lg2idx = 0;
+    while (maxidx != 0) {
+      maxidx >>= 1;
+      lg2idx++;
     }
-    for (unsigned npass = 0; npass < maxidx_temp; ++npass) {
+    lg2idx -= 1;
+    Log(Log_Info, "Log2_index: %u", lg2idx);
+
+    if (lg2idx <= 2) {
+      throw std::runtime_error(
+          "TODO: less than 2 metapasses required");  // TODO
+    }
+
+    uint32_t metaN_passes = lg2idx - 2;
+    Log(Log_Info, "{!} %u metameta passes", metaN_passes);
+
+    //////////////////////////////////////////////////////////
+
+    for (unsigned npass = 0; npass < metaN_passes; ++npass) {
       t1 = now() * 1e-9;
 
       std::sort(metaN_fb.begin(), metaN_fb.end());
@@ -318,50 +340,26 @@ class EndpointMiner : public EndpointClient
       t2 = now() * 1e-9;
       Log(Log_Info, "[=] meta[%u] scan : %lg", npass, t2 - t1);  // TODO
     }
-    /////////////////////////////////////////////////////////////////
+
+    //////////////////////////////////////////////////////////
 
     // t2 = now() * 1e-9;
     // Log(Log_Info, "[=] N extra passes : %lg", t2-t1);  // TODO
 
     Log(Log_Info, "Finished metasearch");
 
-    Log(Log_Info, "Maxindices: %u", roundInfo->maxIndices);
     // Log(Log_Info, "Salt: %" PRIx64 "", roundInfo->roundSalt);
     // Log(Log_Info, "c[0]: %x", roundInfo->c[0]);
     // Log(Log_Info, "c[1]: %x", roundInfo->c[1]);
     // Log(Log_Info, "c[2]: %x", roundInfo->c[2]);
     // Log(Log_Info, "c[3]: %x", roundInfo->c[3]);
-    Log(Log_Info, "hashsteps: %u", roundInfo->hashSteps);
 
-    uint32_t maxidx = roundInfo->maxIndices;
-    uint32_t lg2idx = 0;
-    while (maxidx != 0) {
-      maxidx >>= 1;
-      lg2idx++;
-    }
-    lg2idx -= 1;
-    Log(Log_Info, "Log: %u", lg2idx);
-
-    ///////////////////////////////////////////
-
-    // unsigned nTrials = 0;
-    // uint32_t r = 0;
-    // while (1) {
-    //  ++nTrials;
-
-    //  Log(Log_Debug, "Trial %d.", nTrials);
-
-    //  // TODO
+    //////////////////////////////////////////////////////////
 
     //  double t = now() * 1e-9;  // Work out where we are against the deadline
     //  double timeBudget = tFinish - t;
     //  Log(Log_Debug, "Finish trial %d, time remaining =%lg seconds.", nTrials,
     //      timeBudget);
-
-    //  if (timeBudget <= 0)
-    //    break;  // We have run out of time, send what we have
-    //}
-    // Log(Log_Info, "nTrials: %u", nTrials);
 
     std::vector<uint32_t> bestSolution(best_indices.begin(),
                                        best_indices.end());
