@@ -250,10 +250,11 @@ public:
     }
 
     // OpenCL Time
-    queue.enqueueWriteBuffer(cBuffer, CL_TRUE, 0, 4 * sizeof(uint32_t),
-                             roundInfo.get()->c);
-    queue.enqueueWriteBuffer(pass2Indices, CL_TRUE, 0,
-                             pass2Size * sizeof(uint32_t), pass2Index);
+    std::vector<cl::Event> copyEvents(2);
+    queue.enqueueWriteBuffer(cBuffer, CL_FALSE, 0, 4 * sizeof(uint32_t),
+                             roundInfo.get()->c, nullptr, &copyEvents[0]);
+    queue.enqueueWriteBuffer(pass2Indices, CL_FALSE, 0,
+                             pass2Size * sizeof(uint32_t), pass2Index, nullptr, &copyEvents[1]);
 
 	cl::NDRange offset(0);               // Always start iterations at x=0, y=0
 	cl::NDRange globalSize(pass2Size);   // Global size must match the original loops
@@ -265,10 +266,11 @@ public:
 	pass2Kernel.setArg(7, cl_uint(roundInfo.get() -> hashSteps));
 	pass2Kernel.setArg(8, cl_uint(best_offset));
 
-	queue.enqueueNDRangeKernel(pass2Kernel, offset, globalSize, localSize);
-	queue.enqueueBarrier();
-    queue.enqueueReadBuffer(pass2Word1, CL_TRUE, 0, pass2Size * sizeof(uint64_t), pass2MSW);
-    queue.enqueueReadBuffer(pass2Word2, CL_TRUE, 0, pass2Size * sizeof(uint64_t), pass2TW);
+    std::vector<cl::Event> kernelExecution(1);
+
+	queue.enqueueNDRangeKernel(pass2Kernel, offset, globalSize, localSize, &copyEvents, &kernelExecution[0]);
+    queue.enqueueReadBuffer(pass2Word1, CL_TRUE, 0, pass2Size * sizeof(uint64_t), pass2MSW, &kernelExecution);
+    queue.enqueueReadBuffer(pass2Word2, CL_TRUE, 0, pass2Size * sizeof(uint64_t), pass2TW, &kernelExecution);
 
     // tbb::parallel_for(0u, pass2Size, [&](unsigned i) {
     //   bigint_t temphash =
