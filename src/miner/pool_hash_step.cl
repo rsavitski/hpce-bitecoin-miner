@@ -62,26 +62,47 @@ void wide_mul(uint n, uint *res_hi, uint *res_lo, const uint *a,
   res_hi[n - 1] = acc;
 }
 
-// Credits:
-// https://devtalk.nvidia.com/default/topic/610914/cuda-programming-and-performance/modular-exponentiation-amp-biginteger/
+// Credits: http://goo.gl/NtaADC
 // Inline PTX assembly
 
-void add_asm(uint *result, const uint *a, const uint *b) {
+// Not used because too many registers used -- register thrashing!
+uint add_asm(uint *result, const uint *a, const uint *b) {
+  uint carry;
+  asm("{\n\t"
+      "add.cc.u32      %0,  %9, %17; \n\t"
+      "addc.cc.u32     %1,  %10, %18; \n\t"
+      "addc.cc.u32     %2, %11, %19; \n\t"
+      "addc.cc.u32     %3, %12, %20; \n\t"
+      "addc.cc.u32     %4, %13, %21; \n\t"
+      "addc.cc.u32     %5, %14, %22; \n\t"
+      "addc.cc.u32     %6, %15, %23; \n\t"
+      "addc.cc.u32     %7, %16, %24; \n\t"
+      "addc.u32         %8, 0, 0; \n\t"
+      "}"
+      : "=r"(result[0]), "=r"(result[1]), "=r"(result[2]), "=r"(result[3]),
+        "=r"(result[4]), "=r"(result[5]), "=r"(result[6]), "=r"(result[7]),
+        "=r"(carry)
+      : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(a[4]), "r"(a[5]),
+        "r"(a[6]), "r"(a[7]), "r"(b[0]), "r"(b[1]), "r"(b[2]), "r"(b[3]),
+        "r"(b[4]), "r"(b[5]), "r"(b[6]), "r"(b[7]));
+}
+
+// Not used because too many registers used -- register thrashing!
+void add_asm_carry(uint *result, const uint *a, const uint b) {
   asm("{\n\t"
       "add.cc.u32      %0,  %8, %16; \n\t"
-      "addc.cc.u32     %1,  %9, %17; \n\t"
-      "addc.cc.u32     %2, %10, %18; \n\t"
-      "addc.cc.u32     %3, %11, %19; \n\t"
-      "addc.cc.u32     %4, %12, %20; \n\t"
-      "addc.cc.u32     %5, %13, %21; \n\t"
-      "addc.cc.u32     %6, %14, %23; \n\t"
-      "addc.u32        %7, %15, %23; \n\t"
+      "addc.cc.u32     %1,  %9, 0; \n\t"
+      "addc.cc.u32     %2, %10, 0; \n\t"
+      "addc.cc.u32     %3, %11, 0; \n\t"
+      "addc.cc.u32     %4, %12, 0; \n\t"
+      "addc.cc.u32     %5, %13, 0; \n\t"
+      "addc.cc.u32     %6, %14, 0; \n\t"
+      "addc.u32        %7, %15, 0; \n\t"
       "}"
       : "=r"(result[0]), "=r"(result[1]), "=r"(result[2]), "=r"(result[3]),
         "=r"(result[4]), "=r"(result[5]), "=r"(result[6]), "=r"(result[7])
       : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(a[4]), "r"(a[5]),
-        "r"(a[6]), "r"(a[7]), "r"(b[0]), "r"(b[1]), "r"(b[2]), "r"(b[3]),
-        "r"(b[4]), "r"(b[5]), "r"(b[6]), "r"(b[7]));
+        "r"(a[6]), "r"(a[7]), "r"(b));
 }
 
 void mul_asm(uint *result, const uint *a, __constant uint *b) {
@@ -201,7 +222,7 @@ __kernel void poolhash_pair_tophalf(__global const uint *indices,
     bigint_t tmp;
     wide_zero(8, tmp.limbs);
     // tmp=lo(x)*c;
-    wide_mul(4, tmp.limbs + 4, tmp.limbs, x2.limbs, c);
+    mul_asm(tmp.limbs, x2.limbs, c);
     // [carry,lo(x)] = lo(tmp)+hi(x)
     uint carry = wide_add(4, x2.limbs, tmp.limbs, x2.limbs + 4);
     // hi(x) = hi(tmp) + carry
