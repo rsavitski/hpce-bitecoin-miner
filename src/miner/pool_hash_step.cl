@@ -62,11 +62,137 @@ void wide_mul(uint n, uint *res_hi, uint *res_lo, const uint *a,
   res_hi[n - 1] = acc;
 }
 
+// Credits:
+// https://devtalk.nvidia.com/default/topic/610914/cuda-programming-and-performance/modular-exponentiation-amp-biginteger/
+// Inline PTX assembly
+
+void add_asm(ulong *result, const ulong *a, const ulong *b) {
+  asm("{\n\t"
+      ".reg .u32 o0, o1, o2, o3, o4; \n\t"
+      ".reg .u32 o5, o6, o7, i8, i9; \n\t"
+      ".reg .u32 i10, i11, i12, i13; \n\t"
+      ".reg .u32 i14, i15, i16, i17; \n\t"
+      ".reg .u32 i18, i19, i20, i21; \n\t"
+      ".reg .u32 i22, i23;           \n\t"
+      "mov.b64         { i8, i9}, %4;\n\t"
+      "mov.b64         {i10,i11}, %5;\n\t"
+      "mov.b64         {i12,i13}, %6;\n\t"
+      "mov.b64         {i14,i15}, %7;\n\t"
+      "mov.b64         {i16,i17}, %8;\n\t"
+      "mov.b64         {i18,i19}, %9;\n\t"
+      "mov.b64         {i20,i21},%10;\n\t"
+      "mov.b64         {i22,i23},%11;\n\t"
+      "add.cc.u32      o0,  i8, i16; \n\t"
+      "addc.cc.u32     o1,  i9, i17; \n\t"
+      "addc.cc.u32     o2, i10, i18; \n\t"
+      "addc.cc.u32     o3, i11, i19; \n\t"
+      "addc.cc.u32     o4, i12, i20; \n\t"
+      "addc.cc.u32     o5, i13, i21; \n\t"
+      "addc.cc.u32     o6, i14, i22; \n\t"
+      "addc.u32        o7, i15, i23; \n\t"
+      "mov.b64         %0, {o0,o1};  \n\t"
+      "mov.b64         %1, {o2,o3};  \n\t"
+      "mov.b64         %2, {o4,o5};  \n\t"
+      "mov.b64         %3, {o6,o7};  \n\t"
+      "}"
+      : "=l"(result[0]), "=l"(result[1]), "=l"(result[2]), "=l"(result[3])
+      : "l"(a[0]), "l"(a[1]), "l"(a[2]), "l"(a[3]), "l"(b[0]), "l"(b[1]),
+        "l"(b[2]), "l"(b[3]));
+}
+
+void mul_asm(ulong *result, const ulong *a, __constant ulong *b) {
+  asm("{\n\t"
+      ".reg .u32 o0, o1, o2, o3, o4;    \n\t"
+      ".reg .u32 o5, o6, o7, i8, i9;    \n\t"
+      ".reg .u32 i10, i11, i12, i13;    \n\t"
+      ".reg .u32 i14, i15, i16, i17;    \n\t"
+      ".reg .u32 i18, i19, i20, i21;    \n\t"
+      ".reg .u32 i22, i23;              \n\t"
+      "mov.b64         { i8, i9}, %4;   \n\t"
+      "mov.b64         {i10,i11}, %5;   \n\t"
+      "mov.b64         {i12,i13}, %6;   \n\t"
+      "mov.b64         {i14,i15}, %7;   \n\t"
+      "mov.b64         {i16,i17}, %8;   \n\t"
+      "mov.b64         {i18,i19}, %9;   \n\t"
+      "mov.b64         {i20,i21},%10;   \n\t"
+      "mov.b64         {i22,i23},%11;   \n\t"
+      "mul.lo.u32      o0,  i8, i16;    \n\t"
+      "mul.hi.u32      o1,  i8, i16;    \n\t"
+      "mad.lo.cc.u32   o1,  i8, i17, o1;\n\t"
+      "madc.hi.u32     o2,  i8, i17,  0;\n\t"
+      "mad.lo.cc.u32   o1,  i9, i16, o1;\n\t"
+      "madc.hi.cc.u32  o2,  i9, i16, o2;\n\t"
+      "madc.hi.u32     o3,  i8, i18,  0;\n\t"
+      "mad.lo.cc.u32   o2,  i8, i18, o2;\n\t"
+      "madc.hi.cc.u32  o3,  i9, i17, o3;\n\t"
+      "madc.hi.u32     o4,  i8, i19,  0;\n\t"
+      "mad.lo.cc.u32   o2,  i9, i17, o2;\n\t"
+      "madc.hi.cc.u32  o3, i10, i16, o3;\n\t"
+      "madc.hi.cc.u32  o4,  i9, i18, o4;\n\t"
+      "madc.hi.u32     o5,  i8, i20,  0;\n\t"
+      "mad.lo.cc.u32   o2, i10, i16, o2;\n\t"
+      "madc.lo.cc.u32  o3,  i8, i19, o3;\n\t"
+      "madc.hi.cc.u32  o4, i10, i17, o4;\n\t"
+      "madc.hi.cc.u32  o5,  i9, i19, o5;\n\t"
+      "madc.hi.u32     o6,  i8, i21,  0;\n\t"
+      "mad.lo.cc.u32   o3,  i9, i18, o3;\n\t"
+      "madc.hi.cc.u32  o4, i11, i16, o4;\n\t"
+      "madc.hi.cc.u32  o5, i10, i18, o5;\n\t"
+      "madc.hi.cc.u32  o6,  i9, i20, o6;\n\t"
+      "madc.hi.u32     o7,  i8, i22,  0;\n\t"
+      "mad.lo.cc.u32   o3, i10, i17, o3;\n\t"
+      "madc.lo.cc.u32  o4,  i8, i20, o4;\n\t"
+      "madc.hi.cc.u32  o5, i11, i17, o5;\n\t"
+      "madc.hi.cc.u32  o6, i10, i19, o6;\n\t"
+      "madc.hi.u32     o7,  i9, i21, o7;\n\t"
+      "mad.lo.cc.u32   o3, i11, i16, o3;\n\t"
+      "madc.lo.cc.u32  o4,  i9, i19, o4;\n\t"
+      "madc.hi.cc.u32  o5, i12, i16, o5;\n\t"
+      "madc.hi.cc.u32  o6, i11, i18, o6;\n\t"
+      "madc.hi.u32     o7, i10, i20, o7;\n\t"
+      "mad.lo.cc.u32   o4, i10, i18, o4;\n\t"
+      "madc.lo.cc.u32  o5,  i8, i21, o5;\n\t"
+      "madc.hi.cc.u32  o6, i12, i17, o6;\n\t"
+      "madc.hi.u32     o7, i11, i19, o7;\n\t"
+      "mad.lo.cc.u32   o4, i11, i17, o4;\n\t"
+      "madc.lo.cc.u32  o5,  i9, i20, o5;\n\t"
+      "madc.hi.cc.u32  o6, i13, i16, o6;\n\t"
+      "madc.hi.u32     o7, i12, i18, o7;\n\t"
+      "mad.lo.cc.u32   o4, i12, i16, o4;\n\t"
+      "madc.lo.cc.u32  o5, i10, i19, o5;\n\t"
+      "madc.lo.cc.u32  o6,  i8, i22, o6;\n\t"
+      "madc.hi.u32     o7, i13, i17, o7;\n\t"
+      "mad.lo.cc.u32   o5, i11, i18, o5;\n\t"
+      "madc.lo.cc.u32  o6,  i9, i21, o6;\n\t"
+      "madc.hi.u32     o7, i14, i16, o7;\n\t"
+      "mad.lo.cc.u32   o5, i12, i17, o5;\n\t"
+      "madc.lo.cc.u32  o6, i10, i20, o6;\n\t"
+      "madc.lo.u32     o7,  i8, i23, o7;\n\t"
+      "mad.lo.cc.u32   o5, i13, i16, o5;\n\t"
+      "madc.lo.cc.u32  o6, i11, i19, o6;\n\t"
+      "madc.lo.u32     o7,  i9, i22, o7;\n\t"
+      "mad.lo.cc.u32   o6, i12, i18, o6;\n\t"
+      "madc.lo.u32     o7, i10, i21, o7;\n\t"
+      "mad.lo.cc.u32   o6, i13, i17, o6;\n\t"
+      "madc.lo.u32     o7, i11, i20, o7;\n\t"
+      "mad.lo.cc.u32   o6, i14, i16, o6;\n\t"
+      "madc.lo.u32     o7, i12, i19, o7;\n\t"
+      "mad.lo.u32      o7, i13, i18, o7;\n\t"
+      "mad.lo.u32      o7, i14, i17, o7;\n\t"
+      "mad.lo.u32      o7, i15, i16, o7;\n\t"
+      "mov.b64         %0, {o0,o1};     \n\t"
+      "mov.b64         %1, {o2,o3};     \n\t"
+      "mov.b64         %2, {o4,o5};     \n\t"
+      "mov.b64         %3, {o6,o7};     \n\t"
+      "}"
+      : "=l"(result[0]), "=l"(result[1]), "=l"(result[2]), "=l"(result[3])
+      : "l"(a[0]), "l"(a[1]), "l"(a[2]), "l"(a[3]), "l"(b[0]), "l"(b[1]),
+        "l"(b[2]), "l"(b[3]));
+}
 // Kenrl to hash 2 pairs top half
 __kernel void poolhash_pair_tophalf(__global const uint *indices,
                                     __global ulong *word1,
-                                    __global ulong *word2,
-                                    __constant uint *c,
+                                    __global ulong *word2, __constant uint *c,
                                     const uint roundId, const uint roundSalt,
                                     const uint chainHash, const uint hashSteps,
                                     const uint offset) {
