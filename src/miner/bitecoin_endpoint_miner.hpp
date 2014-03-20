@@ -14,7 +14,6 @@
 #include <algorithm>
 #include <functional>
 
-#include "tbb/parallel_for.h"
 #define __CL_ENABLE_EXCEPTIONS
 #include "CL/cl.hpp"
 
@@ -140,7 +139,7 @@ public:
       bool operator<(point_top const &other) const { return msdw < other.msdw; }
     };
 
-    const unsigned ptvct_sz = 1 << 24;
+    const unsigned ptvct_sz = 1 << 18;
 
     // point vector
     std::vector<point_top> pts(ptvct_sz);
@@ -149,20 +148,19 @@ public:
     std::minstd_rand gen(rd());
     std::uniform_int_distribution<uint32_t> dis;
 
-    // generate point vector
     double t1 = now() * 1e-9;
+    /// generate point vector
     for (unsigned i = 0; i < ptvct_sz; ++i) {
       uint32_t id = dis(gen);
       point_top pt;
+
+      bigint_t temphash = PoolHashMiner(roundInfo.get(), id, chainHash);
+
       pt.indx = id;
-      pts[i] = pt;
-    }
-    // generate point vector
-    tbb::parallel_for(0u, ptvct_sz, [&](unsigned i) {
-      bigint_t temphash =
-          PoolHashMiner(roundInfo.get(), pts[i].indx, chainHash);
-      pts[i].msdw =
+      pt.msdw =
           uint64_t(temphash.limbs[6]) | (uint64_t(temphash.limbs[7]) << 32);
+
+      pts.push_back(pt);
 
       // fprintf(stderr, "id: %x\n", id);
       // fprintf(stderr, "before: %8x %8x\n", temphash.limbs[7],
@@ -170,7 +168,7 @@ public:
       // uint64_t sdh = uint64_t(temphash.limbs[6]) |
       // (uint64_t(temphash.limbs[7]) << 32);
       // fprintf(stderr, "after: %8x %8x\n\n", sdh>>32 , sdh & 0xffffFFFF);
-    });
+    }
     double t2 = now() * 1e-9;
     Log(Log_Info, "Time taken %lf", t2 - t1);
 
