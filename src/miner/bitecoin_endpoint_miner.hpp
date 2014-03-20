@@ -12,6 +12,7 @@
 #include <memory>
 #include <map>
 #include <algorithm>
+#include <functional>
 
 #include "tbb/parallel_for.h"
 
@@ -34,10 +35,31 @@ private:
   unsigned m_knownRounds;
   std::map<std::string, unsigned> m_knownCoins;
 
+  unsigned pass2Size = 1 << 24;
+  uint64_t *pass2MSW;   // 2 most significant word (MSW followed by 2nd MSW)
+  uint64_t *pass2TW;    // 3rd, 4th MS words
+  uint32_t *pass2Index; // base index
+  uint32_t *pass2Pairing;
+
 public:
   EndpointMiner(std::string clientId, std::string minerId,
                 std::unique_ptr<Connection> &conn, std::shared_ptr<ILog> &log)
-      : EndpointClient(clientId, minerId, conn, log) {}
+      : EndpointClient(clientId, minerId, conn, log) {
+
+    pass2MSW = new uint64_t[pass2Size]();
+    pass2TW = new uint64_t[pass2Size]();
+    pass2Index = new uint32_t[pass2Size]();
+    pass2Pairing = new uint32_t[pass2Size]();
+  }
+
+  ~EndpointMiner() {
+    delete[] pass2MSW;
+    delete[] pass2TW;
+    delete[] pass2Index;
+    delete[] pass2Pairing;
+  }
+
+  EndpointMiner(const EndpointMiner &obj) = delete;
 
   /* Here is a default implementation of make bid.
           I would suggest that you override this method as a starting point.
@@ -183,31 +205,30 @@ public:
     };
 
     // metapoint vector
-    const unsigned metaptvct_sz =
-        1 << 24; // TODO: autotune, maybe golden diff finder too
-    std::vector<metapoint_top> metapts(metaptvct_sz);
+    std::vector<metapoint_top> metapts(pass2Size);
 
     std::uniform_int_distribution<uint32_t> dis2(0, 0xFFFFFFFE - best_offset);
 
     t1 = now() * 1e-9;
     // generate point vector
-    for (unsigned i = 0; i < metaptvct_sz; ++i) {
-      metapts[i].indx = dis2(gen);
+    for (unsigned i = 0; i < pass2Size; ++i) {
+      pass2Index[i] = dis2(gen);
+      pass2Pairing[i] = i;
     }
 
-    tbb::parallel_for(0u, metaptvct_sz, [&](unsigned i) {
+    tbb::parallel_for(0u, pass2Size, [&](unsigned i) {
       bigint_t temphash =
-          PoolHashMiner(roundInfo.get(), metapts[i].indx, chainHash);
+          PoolHashMiner(roundInfo.get(), pass2Index[i], chainHash);
       bigint_t temphash2 = PoolHashMiner(
-          roundInfo.get(), metapts[i].indx + best_offset, chainHash);
+          roundInfo.get(), pass2Index[i] + best_offset, chainHash);
 
       uint32_t msw = temphash.limbs[7] ^ temphash2.limbs[7];
       uint32_t msw2 = temphash.limbs[6] ^ temphash2.limbs[6];
       uint32_t msw3 = temphash.limbs[5] ^ temphash2.limbs[5];
       uint32_t msw4 = temphash.limbs[4] ^ temphash2.limbs[4];
 
-      metapts[i].msdw = uint64_t(msw2) | (uint64_t(msw) << 32);
-      metapts[i].tdw = uint64_t(msw4) | (uint64_t(msw3) << 32);
+      pass2MSW[i] = uint64_t(msw2) | (uint64_t(msw) << 32);
+      pass2TW[i] = uint64_t(msw4) | (uint64_t(msw3) << 32);
     });
     t2 = now() * 1e-9;
     Log(Log_Info, "Time taken %lf", t2 - t1);
@@ -219,7 +240,14 @@ public:
     //}
     // fprintf(stderr, "--------\n\n");
 
-    std::sort(metapts.begin(), metapts.end());
+    std::sort(pass2Pairing, pass2Pairing + pass2Size,
+              [&](const uint32_t &a, const uint32_t &b) {
+                if (pass2MSW[a] == pass2MSW[b]) {
+                  return pass2TW[a] < pass2TW[b];
+                } else {
+                  return pass2MSW[a] < pass2MSW[b];
+                }
+              });
 
     // fprintf(stderr, "--------\n\n");
     // for (auto pt : metapts) {
@@ -235,9 +263,9 @@ public:
 
     uint32_t metaidx[2];
 
-    for (auto it = metapts.begin(); it != metapts.end() - 1; ++it) {
-      uint32_t curr_indx = it->indx;
-      uint32_t next_indx = (it + 1)->indx;
+    for (unsigned i = 0; i < pass2Size - 1; ++i) {
+      uint32_t curr_indx = pass2Index[pass2Pairing[i]];
+      uint32_t next_indx = pass2Index[pass2Pairing[i + 1]];
 
       if (curr_indx == next_indx || curr_indx + best_offset == next_indx ||
           next_indx + best_offset == curr_indx) {
@@ -247,8 +275,8 @@ public:
       }
 
       metapoint_top xored;
-      xored.msdw = it->msdw ^ (it + 1)->msdw;
-      xored.tdw = it->tdw ^ (it + 1)->tdw;
+      xored.msdw = pass2MSW[pass2Pairing[i]] ^ pass2MSW[pass2Pairing[i + 1]];
+      xored.tdw = pass2TW[pass2Pairing[i]] ^ pass2TW[pass2Pairing[i + 1]];
 
       if (xored < mbest_diff) {
         // fprintf(stderr, "FOUND better metadiff\n");
