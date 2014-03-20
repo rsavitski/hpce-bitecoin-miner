@@ -32,7 +32,7 @@ uint wide_add_carry(uint n, uint *res, const uint *a, uint b) {
         \note All the integers must be distinct, the output cannot overlap the
    input */
 void wide_mul(uint n, uint *res_hi, uint *res_lo, const uint *a,
-              __global const uint *b) {
+              __constant uint *b) {
   ulong carry = 0, acc = 0;
   for (uint i = 0; i < n; i++) {
     for (uint j = 0; j <= i; j++) {
@@ -66,9 +66,10 @@ void wide_mul(uint n, uint *res_hi, uint *res_lo, const uint *a,
 __kernel void poolhash_pair_tophalf(__global const uint *indices,
                                     __global ulong *word1,
                                     __global ulong *word2,
-                                    __global const uint *c, uint roundId,
-                                    uint roundSalt, uint chainHash,
-                                    uint hashSteps, uint offset) {
+                                    __constant uint *c,
+                                    const uint roundId, const uint roundSalt,
+                                    const uint chainHash, const uint hashSteps,
+                                    const uint offset) {
   uint i = get_global_id(0);
   uint index = indices[i];
   bigint_t x1;
