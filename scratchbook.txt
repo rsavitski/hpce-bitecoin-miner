@@ -1,5 +1,0 @@
-- made fnv hash be computed once per microround
-- made fnv hash only recompute the new data in the blockchain
-
-- spotted independence of index hashing, combining M*N work for M^N hashes (xoring all tuples of sampled bins)
-
