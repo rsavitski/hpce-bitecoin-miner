@@ -28,43 +28,43 @@ std::string loadSource(const char *fileName) {
 }
 
 cl::Program setupOpenCL(std::vector<cl::Platform> &platforms,
-                 std::vector<cl::Device> &devices, cl::Device &device,
-                 cl::Context &context, std::shared_ptr<ILog> &log) {
+                        std::vector<cl::Device> &devices, cl::Device &device,
+                        cl::Context &context, std::shared_ptr<ILog> &log) {
   // Initialise OpenCL
   cl::Platform::get(&platforms);
   if (platforms.size() == 0)
     throw std::runtime_error("No OpenCL platforms found.");
 
+  bool foundDevice = false;
+  // Choose ONLY NVIDIA GPU
   log->Log(Log_Info, "[OpenCL] Found %d platforms", platforms.size());
   for (unsigned i = 0; i < platforms.size(); i++) {
     std::string vendor = platforms[i].getInfo<CL_PLATFORM_VENDOR>();
     log->Log(Log_Info, "[OpenCL]  Platform %i: %s", i, vendor.c_str());
-  }
 
-  int selectedPlatform = 0;
-  if (getenv("HPCE_SELECT_PLATFORM")) {
-    selectedPlatform = atoi(getenv("HPCE_SELECT_PLATFORM"));
+    cl::Platform platform = platforms.at(i);
+    platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
+    if (devices.size() != 0) {
+      // select the first GPU device
+      log->Log(Log_Info, "[OpenCL] Found %d GPU devices", devices.size());
+      for (unsigned i = 0; i < devices.size(); i++) {
+        std::string name = devices[i].getInfo<CL_DEVICE_NAME>();
+        log->Log(Log_Info, "[OpenCL]  Device %i: %s", i, name.c_str());
+        std::string manufacturer = devices[i].getInfo<CL_DEVICE_VENDOR>();
+        if (manufacturer.find("NVIDIA") != std::string::npos) {
+          log->Log(Log_Info, "[OpenCL] Choosing device %d", 0);
+          device = devices.at(0);
+          foundDevice = true;
+          break;
+        }
+      }
+    }
+    if (foundDevice)
+      break;
   }
-  log->Log(Log_Info, "[OpenCL] Choosing platform %d", selectedPlatform);
-  cl::Platform platform = platforms.at(selectedPlatform);
-
-  platform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
-  if (devices.size() == 0) {
-    throw std::runtime_error("No opencl devices found.");
+  if (!foundDevice) {
+    throw std::runtime_error("No GPU devices found on any platforms.");
   }
-
-  log->Log(Log_Info, "[OpenCL] Found %d devices", devices.size());
-  for (unsigned i = 0; i < devices.size(); i++) {
-    std::string name = devices[i].getInfo<CL_DEVICE_NAME>();
-    log->Log(Log_Info, "[OpenCL]  Device %i: %s", i, name.c_str());
-  }
-
-  int selectedDevice = 0;
-  if (getenv("HPCE_SELECT_DEVICE")) {
-    selectedDevice = atoi(getenv("HPCE_SELECT_DEVICE"));
-  }
-  log->Log(Log_Info, "[OpenCL] Choosing device %d", selectedDevice);
-  device = devices.at(selectedDevice);
 
   context = cl::Context(devices);
 
