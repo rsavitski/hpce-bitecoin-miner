@@ -200,7 +200,8 @@ __kernel void poolhash_pair_tophalf(__global const uint *indices,
     bigint_t tmp;
     wide_zero(8, tmp.limbs);
     // tmp=lo(x)*c;
-    mul_asm(tmp.limbs, x1.limbs, c);
+    // mul_asm(tmp.limbs, x1.limbs, c);
+    wide_mul(4, tmp.limbs + 4, tmp.limbs, x1.limbs, c);
     // [carry,lo(x)] = lo(tmp)+hi(x)
     uint carry = wide_add(4, x1.limbs, tmp.limbs, x1.limbs + 4);
     // hi(x) = hi(tmp) + carry
@@ -221,7 +222,8 @@ __kernel void poolhash_pair_tophalf(__global const uint *indices,
     bigint_t tmp;
     wide_zero(8, tmp.limbs);
     // tmp=lo(x)*c;
-    mul_asm(tmp.limbs, x2.limbs, c);
+    // mul_asm(tmp.limbs, x2.limbs, c);
+    wide_mul(4, tmp.limbs + 4, tmp.limbs, x2.limbs, c);
     // [carry,lo(x)] = lo(tmp)+hi(x)
     uint carry = wide_add(4, x2.limbs, tmp.limbs, x2.limbs + 4);
     // hi(x) = hi(tmp) + carry
