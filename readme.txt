@@ -66,5 +66,5 @@ cores.
 ===============================================================================
 Work Partition:
 
-Yong Wen - OpenCL, TBB, general project code
+Yong Wen Chua - OpenCL, TBB, general project code
 Ryan Savitski - algorithmic design and makebid implementation
