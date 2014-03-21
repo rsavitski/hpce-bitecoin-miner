@@ -1,7 +1,11 @@
 #ifndef bitecoin_miner_endpoint_hpp
 #define bitecoin_miner_endpoint_hpp
 
-#define TBB
+//#define TBB
+
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+#include <cstdio>
 
 #include <cstdarg>
 #include <cstdint>
@@ -31,9 +35,6 @@
 #include "bitecoin_hashing_miner.hpp"
 #include "cl_boilerplate.hpp"
 
-#define __STDC_FORMAT_MACROS
-#include <inttypes.h>
-#include <cstdio>
 
 namespace bitecoin {
 
@@ -84,7 +85,7 @@ private:
   cl::Kernel pass2Kernel;
   cl::Buffer pass2Hashes, pass2Indices;
 
-  unsigned pass2Size = 1 << 22;
+  unsigned pass2Size = 1 << 19;//22;
   uint32_t *pass2Hash;
   uint32_t *pass2Index; // base index
   uint32_t *pass2Pairing;
@@ -221,7 +222,7 @@ public:
                                               : next_indx - curr_indx;
       }
     }
-    Log(Log_Info, "Best diff: %016 PRIx64", best_diff);
+    Log(Log_Info, "Best diff: %016" PRIx64 "", best_diff);
     Log(Log_Info, "Best offset: %8x", best_offset);
 
     pts.clear();
@@ -246,8 +247,8 @@ public:
     };
 
     // metapoint vector
-    const unsigned metaptvct_sz =
-        1 << 18; // TODO: autotune, maybe golden diff finder too
+    //const unsigned metaptvct_sz =
+    //    1 << 18; // TODO: autotune, maybe golden diff finder too
 
     std::vector<metapoint> metaN_fb; // front buffer
     std::vector<metapoint> metaN_bb; // back buffer
@@ -269,8 +270,7 @@ public:
                              &copyEvents[1]);
 
     cl::NDRange offset(0); // Always start iterations at x=0, y=0
-    cl::NDRange globalSize(
-        pass2Size); // Global size must match the original loops
+    cl::NDRange globalSize( pass2Size); // Global size must match the original loops
     cl::NDRange localSize = cl::NullRange; // We don't care about local size
 
     pass2Kernel.setArg(3, cl_uint(roundInfo.get()->roundId));
@@ -330,21 +330,20 @@ public:
                pass2Hash + (pass2Pairing[i + 1] * 8));
       metaN_fb.push_back(temp_meta);
 
-      // bigint_t xoredw;
-      // wide_xor(8, xoredw.limbs, it->point.limbs, (it + 1)->point.limbs);
-      // TODO: retain for maxindices = 4 case
-      // if (wide_compare(BIGINT_WORDS, xoredw.limbs, mbest.limbs) < 0) {
-      //  mbest = xoredw;
-      //  best_indices.clear();
-      //  best_indices.insert(best_indices.begin(), it->indices.begin(),
-      //                      it->indices.end());
-      //  best_indices.insert(best_indices.begin(), (it + 1)->indices.begin(),
-      //                      (it + 1)->indices.end());
-      //}
+      // try retaining 4tuples
+       if (wide_compare(BIGINT_WORDS, temp_meta.point.limbs, mbest.limbs) < 0) {
+        mbest = temp_meta.point;
+        best_indices.clear();
+        best_indices.insert(best_indices.begin(), a.begin(), a.end());
+        best_indices.insert(best_indices.begin(), b.begin(), b.end());
+      }
     }
-    // for (auto item : tempvct)
-    //  Log(Log_Info, "thing: %u", item);
-    // Log(Log_Verbose, "Stamp");  // TODO
+  
+    Log(Log_Info, "Best indices .size(): %zu", best_indices.size());
+    double TTTemp;
+    TTTemp = wide_as_double(BIGINT_WORDS, mbest.limbs);
+    Log(Log_Fatal, "(META ) score=%lg, leading zeros=%lg.", TTTemp,
+        (256 - log(TTTemp) * 1.44269504088896340736));
 
     // 4 indices per metapt at this time
 
@@ -368,7 +367,7 @@ public:
       throw std::runtime_error("TODO: less than 2 metapasses required"); // TODO
     }
 
-    uint32_t metaN_passes = lg2idx - 2;
+    uint32_t metaN_passes = lg2idx - 2; //TODO
     Log(Log_Info, "{!} %u metameta passes", metaN_passes);
 
     //////////////////////////////////////////////////////////
@@ -404,8 +403,12 @@ public:
                               (it + 1)->indices.end());
         }
       }
-      Log(Log_Info, "Best indices .size(): %zu", best_indices.size());
       std::swap(metaN_bb, metaN_fb); // TAG
+      // logging and stuff
+      Log(Log_Info, "Best indices .size(): %zu", best_indices.size());
+      TTTemp = wide_as_double(BIGINT_WORDS, mbest.limbs);
+      Log(Log_Fatal, "(META%d) score=%lg, leading zeros=%lg.", npass, TTTemp,
+          (256 - log(TTTemp) * 1.44269504088896340736));
       t2 = now() * 1e-9;
       Log(Log_Info, "[=] meta[%u] scan : %lg", npass, t2 - t1); // TODO
     }
@@ -441,13 +444,14 @@ public:
 
     double score = wide_as_double(BIGINT_WORDS, proof.limbs);
     double leadingzeros = 256 - log(score) * 1.44269504088896340736;
-    Log(Log_Fatal, "score=%lg, leading zeros=%lg.", score, leadingzeros);
+    Log(Log_Fatal, "[%d] score=%lg, leading zeros=%lg.",roundInfo.get()->roundId, score, leadingzeros);
 
     std::sort(bestSolution.begin(), bestSolution.end());
 
     solution = bestSolution;
     wide_copy(BIGINT_WORDS, pProof, proof.limbs);
 
+    Log(Log_Info, "Submitting proof of size: %zu", bestSolution.size());
     Log(Log_Verbose, "MakeBid - finish.");
   }
 };
