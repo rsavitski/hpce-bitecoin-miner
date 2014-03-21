@@ -262,9 +262,12 @@ public:
 #endif
 
     //////////////////////////////////////////////////////////
-
+#ifdef TBB
+    tbb::parallel_sort(pts.begin(), pts.end());
+#else
     // sort to later consider closest pairs
     std::sort(pts.begin(), pts.end());
+#endif
 
     //////////////////////////////////////////////////////////
 
@@ -460,9 +463,12 @@ public:
 
     for (unsigned npass = 0; npass < metaN_passes; ++npass) {
       t1 = now() * 1e-9;
-
+#ifdef TBB
+      tbb::parallel_sort(metaN_fb.begin(), metaN_fb.end());
+#else
       // sort to bring closest metapoints into adjacent positions
       std::sort(metaN_fb.begin(), metaN_fb.end());
+#endif
 
       t2 = now() * 1e-9;
       Log(Log_Info, "[=] meta[%u] sort : %lg", npass, t2 - t1);
