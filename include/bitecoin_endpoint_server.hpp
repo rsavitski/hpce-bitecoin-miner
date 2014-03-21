@@ -75,7 +75,7 @@ public:
         beginRound->roundId = 0xfa73;//roundId;
         beginRound->roundSalt = 0x7437f2ec;//rand();
         beginRound->chainData.resize(16 + (rand() % 1000));
-        beginRound->maxIndices = 16;
+        beginRound->maxIndices = 1 + rand()%20;
         memset(beginRound->c, 0, BIGINT_LENGTH / 2);
         // These are just arbitrary values. The real exchange may choose
         // different ones
@@ -84,10 +84,10 @@ public:
         //beginRound->c[2] = 3418534911;
         //beginRound->c[3] = 2138916474;
       
-          beginRound->c[3] =0x7f7d467a;
-                  beginRound->c[2] =0xcbc2b3ff;
-                          beginRound->c[1] =0xffffffff;
-                                  beginRound->c[0] =0xfffff58d;
+        beginRound->c[3] =0x7f7d467a;
+        beginRound->c[2] =0xcbc2b3ff;
+        beginRound->c[1] =0xffffffff;
+        beginRound->c[0] =0xfffff58d;
 
         // Again exchange might choose differently
         //beginRound->hashSteps = 16 + rand() % 16;
