@@ -1,7 +1,7 @@
 #ifndef bitecoin_miner_endpoint_hpp
 #define bitecoin_miner_endpoint_hpp
 
-//#define TBB
+#define TBB
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -167,7 +167,7 @@ public:
       std::vector<uint32_t> &solution, // solution -> index array
       uint32_t *pProof                 // proof
       ) {
-    
+
     //////////////////////////////////////////////////////////
 
     Log(Log_Info, "Maxindices: %u", roundInfo->maxIndices);
@@ -179,7 +179,7 @@ public:
       lg2idx++;
     }
     lg2idx -= 1;
-    
+
 
     Log(Log_Info, "Log2_index: %u", lg2idx);
     Log(Log_Info, "Hashsteps: %u", roundInfo->hashSteps);
@@ -254,7 +254,7 @@ public:
     tdata.work_sz = metapass_sz;
 
     //////////////////////////////////////////////////////////
-    
+
     // trivial case of maxindices == 1
     if (lg2idx == 0) {
       direct_idx1_search((1 << 17), mbest, best_indices, gen, dis, roundInfo,
@@ -587,7 +587,7 @@ void finaliseBid(timing_data &tdata,std::vector<uint32_t> best_indices, uint64_t
   // recalculate timing information for feedback
   tdata.tdiff_per_numstep = tdata.tdiff_find/roundInfo->hashSteps;
   fprintf(stderr, "[-] diff time per step: %lg\n", tdata.tdiff_per_numstep);
-  
+
   if (tdata.ismeta){
     double tnow = now() * 1e-9;
     double ttaken = tnow - tdata.tmeta_start;
