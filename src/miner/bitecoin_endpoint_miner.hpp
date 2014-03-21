@@ -75,6 +75,7 @@ struct timing_data{
   double hashrate;
   unsigned ismeta;
   unsigned metafactor;
+  double timeframe;
 };
 
 //////////////////////////////////////////////////////////
@@ -189,7 +190,7 @@ public:
     // timing setup
     Log(Log_Info, "MakeBid - start, total period=%lg.", period);
 
-    static timing_data tdata = { .tdiff_find = 0.1, .tdiff_per_numstep = 0.01, .work_sz = 0, .tmeta_start=0, .hashrate=(1<<18) };
+    static timing_data tdata = { .tdiff_find = 0.1, .tdiff_per_numstep = 0.01, .work_sz = 0, .tmeta_start=0, .hashrate=(1<<18), .timeframe=0};
 
     double tdiff_expected = tdata.tdiff_per_numstep*roundInfo->hashSteps;
 
@@ -200,6 +201,7 @@ public:
         request->timeStampReceiveBids * 1e-9 + skewEstimate - tSafetyMargin;
 
     double timeframe = period - tSafetyMargin - tdiff_expected;
+    tdata.timeframe = timeframe;
     fprintf(stderr, "[-] time frame: %lg\n",timeframe);
 
     fprintf(stderr, "[-] Expected time for tdiff_find: %lg\n", tdiff_expected);
@@ -588,7 +590,7 @@ void finaliseBid(timing_data &tdata,std::vector<uint32_t> best_indices, uint64_t
   tdata.tdiff_per_numstep = tdata.tdiff_find/roundInfo->hashSteps;
   fprintf(stderr, "[-] diff time per step: %lg\n", tdata.tdiff_per_numstep);
 
-  if (tdata.ismeta){
+  if (tdata.ismeta && tdata.timeframe > 1){
     double tnow = now() * 1e-9;
     double ttaken = tnow - tdata.tmeta_start;
     fprintf(stderr, "[***] real time taken : %lg\n", ttaken);
