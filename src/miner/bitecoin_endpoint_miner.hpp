@@ -91,9 +91,6 @@ void idx2_scan(uint64_t work_size, uint32_t best_offset, bigint_t &mbest,
 class EndpointMiner : public EndpointClient
 {
  private:
-  EndpointMiner(EndpointMiner &) = delete;
-  void operator=(const EndpointMiner &) = delete;
-
   unsigned m_knownRounds;
   std::map<std::string, unsigned> m_knownCoins;
 
@@ -147,6 +144,8 @@ class EndpointMiner : public EndpointClient
     delete[] pass2Index;
     delete[] pass2Pairing;
   }
+  EndpointMiner(const EndpointMiner &) = delete;
+  void operator=(const EndpointMiner &) = delete;
 
   virtual void MakeBid(
       const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
@@ -374,7 +373,7 @@ class EndpointMiner : public EndpointClient
     //////////////////////////////////////////////////////////
 
     t2 = now() * 1e-9;
-    Log(Log_Info, "[=] metapt gen : %lg", t2 - t1); 
+    Log(Log_Info, "[=] metapt gen : %lg", t2 - t1);
     t1 = now() * 1e-9;
 
     // sort positions in arrays of metapoints and corresponding indices by
