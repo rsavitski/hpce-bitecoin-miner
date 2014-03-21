@@ -190,7 +190,14 @@ public:
     // timing setup
     Log(Log_Info, "MakeBid - start, total period=%lg.", period);
 
-    static timing_data tdata = { .tdiff_find = 0.1, .tdiff_per_numstep = 0.01, .work_sz = 0, .tmeta_start=0, .hashrate=(1<<18), .timeframe=0};
+    static timing_data tdata = { .tdiff_find = 0.1,
+                                 .tdiff_per_numstep = 0.01,
+                                 .work_sz = 0,
+                                 .tmeta_start = 0,
+                                 .hashrate = (1 << 18),
+                                 .ismeta = 0,
+                                 .metafactor = 0,
+                                 .timeframe = 0 };
 
     double tdiff_expected = tdata.tdiff_per_numstep*roundInfo->hashSteps;
 
