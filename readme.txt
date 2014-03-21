@@ -1,5 +1,5 @@
 ===============================================================================
-HPCE Coursework 6: bitecoin 
+HPCE Coursework 6: bitecoin
 Ryan Savitski & Yong Wen Chua
 ===============================================================================
 General Idea:
@@ -55,8 +55,7 @@ On a CPU-only implementation, the bottleneck is poolhashing for metapoint
 generation. For profiled runs, around 80% of time was spent in wide_mul.
 
 Therefore an OpenCL implementation of metapoint generation was written, using
-inline ptx assembly (not just copy-pasted, Yong Wen re-engineered it) to
-accelerate multiplication.
+inline ptx assembly to accelerate multiplication.
 
 With a GPU-accelerated metapoint generation, the new bottleneck of the algorithm
 is the NlogN sorting of metapoint arrays. This is accelerated through
