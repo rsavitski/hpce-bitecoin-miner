@@ -43,10 +43,10 @@ needs to run an online attack against the offset (2^16 - 2^17 range as sorting
 trick gives us an effective hashrate of N^2 and the 17th power is needed for a
 different crypto property not explained here).
 
-With these approaches combined, we can generate proofs with around 140 leading
-zeroes (average for 16 index rounds) in a couple of seconds. For longer rounds
-(tens of seconds), there are diminishing returns but up to 190 leading zeroes
-were cleared.
+With these approaches combined, on laptop grade machines, we can generate
+proofs with around 140 leading zeroes (average for 16 index rounds) in a couple
+of seconds. For longer rounds (tens of seconds), there are diminishing returns
+but up to 190 leading zeroes were cleared.
 
 ===============================================================================
 OpenCL/TBB:
