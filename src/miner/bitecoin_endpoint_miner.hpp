@@ -122,7 +122,7 @@ private:
   cl::Kernel pass2Kernel;
   cl::Buffer pass2Hashes, pass2Indices;
 
-  unsigned pass2Size = 1 << 24; // max work size
+  unsigned pass2Size = 1 << 25; // max work size
   uint32_t *pass2Hash;
   uint32_t *pass2Index; // base index
   uint32_t *pass2Pairing;
@@ -259,7 +259,7 @@ public:
     ddt = ddt*0.8;
     double logddt = ceil(log2(ddt)); //hack2
     if (logddt >= 21){
-      ddt = ddt * (1- 0.1*(logddt-20));
+      ddt = ddt * (1- 0.1*(logddt-21));
     }
 
     metapass_sz = unsigned(ddt); // safety factor
