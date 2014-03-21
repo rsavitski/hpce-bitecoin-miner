@@ -27,21 +27,26 @@ arrays are more sorted and stable in subsequent passes, making this iterative
 scheme both effective (by empirical evidence) and cheaper than scaling the size
 of the initial point seeds.
 
-Additionally, the implementation takes advantage of a differential cryptographic
-weakness of poolhash to get around 32 leading zero clears for free. The weakness
-is such that, given an index i and an index j = i+k (where k is a constant), the
-arithmetic difference of their corresponding points after poolhashing is the
-same as for any other pair of indices separated by k. Therefore, if we find one
-pair of indices whose arithmetic difference (and thus most xorings) has a lot of
-leading zeroes, we can then generate pairing of points (metapoints) that are
-guaranteed to always have the same arithmetic difference and thus amount of
-leading zeroes. Interestingly enough, these offsets only depend on the prime
-constant c and numsteps of poolhash. Given that c does not seem to be varied, it
-would be possible to construct a cache of such offsets to save ~140 milliseconds
-for known rounds. As otherwise the code needs to run an online attack against
-  the offset (2^16 - 2^17 range as sorting trick gives us an effective hashrate
-  of N^2 and the 17th power is needed for a different crypto property not
-  explained here).
+Additionally, the implementation takes advantage of a differential
+cryptographic weakness of poolhash to get around 32 leading zero clears for
+free. The weakness is such that, given an index i and an index j=i+k (where k
+is a constant), the arithmetic difference of their corresponding points after
+poolhashing is the same as for any other pair of indices separated by k.
+Therefore, if we find one pair of indices whose arithmetic difference (and thus
+most xorings) has a lot of leading zeroes, we can then generate pairing of
+points (metapoints) that are guaranteed to always have the same arithmetic
+difference and thus amount of leading zeroes. Interestingly enough, these
+offsets only depend on the prime constant c and numsteps of poolhash. Given
+that c does not seem to be varied, it would be possible to construct a cache of
+such offsets to save ~140 milliseconds for known rounds. As otherwise the code
+needs to run an online attack against the offset (2^16 - 2^17 range as sorting
+trick gives us an effective hashrate of N^2 and the 17th power is needed for a
+different crypto property not explained here).
+
+With these approaches combined, on laptop grade machines, we can generate
+proofs with around 140 leading zeroes (average for 16 index rounds) in a couple
+of seconds. For longer rounds (tens of seconds), there are diminishing returns
+but up to 190 leading zeroes were cleared.
 
 ===============================================================================
 OpenCL/TBB:
