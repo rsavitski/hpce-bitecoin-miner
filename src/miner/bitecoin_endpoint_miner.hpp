@@ -35,14 +35,15 @@
 #include "bitecoin_hashing_miner.hpp"
 #include "cl_boilerplate.hpp"
 
-
-namespace bitecoin {
+namespace bitecoin
+{
 
 // merge step of two sorted vectors into a third with additional check of
 // uniqueness of all values (important for point fold uniqueness checks)
 // returns 0 if identical elements were found
 int merge_and_check_uniq(std::vector<uint32_t> &res, std::vector<uint32_t> &v1,
-                         std::vector<uint32_t> &v2) {
+                         std::vector<uint32_t> &v2)
+{
   res.clear();
   auto it1 = v1.begin();
   auto it2 = v2.begin();
@@ -54,7 +55,7 @@ int merge_and_check_uniq(std::vector<uint32_t> &res, std::vector<uint32_t> &v1,
     } else if (*it2 < *it1) {
       res.push_back(*it2++);
     } else
-      return 0; // found identical element, will skip pair
+      return 0;  // found identical element, will skip pair
   }
   while (it1 != v1.end())
     res.push_back(*it1++);
@@ -66,19 +67,30 @@ int merge_and_check_uniq(std::vector<uint32_t> &res, std::vector<uint32_t> &v1,
 
 // last thing called by makebid before quitting
 // copies proof and indices to caller
-void finaliseBid(std::vector<uint32_t> best_indices, uint64_t chainHash,const std::shared_ptr<Packet_ServerBeginRound> roundInfo, std::vector<uint32_t> &solution, uint32_t *pProof );
+void finaliseBid(std::vector<uint32_t> best_indices, uint64_t chainHash,
+                 const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
+                 std::vector<uint32_t> &solution, uint32_t *pProof);
 
 // trivial case of maxindices == 1. Scrappy implementation for correctness.
-void direct_idx1_search(uint64_t work_size, bigint_t &mbest, std::vector<uint32_t> &best_indices, std::minstd_rand &gen, std::uniform_int_distribution<uint32_t> &dis, const std::shared_ptr<Packet_ServerBeginRound> roundInfo, uint64_t chainHash );
+void direct_idx1_search(
+    uint64_t work_size, bigint_t &mbest, std::vector<uint32_t> &best_indices,
+    std::minstd_rand &gen, std::uniform_int_distribution<uint32_t> &dis,
+    const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
+    uint64_t chainHash);
 
 // maxindices == 2 case, simple linear scan as we have already found
 // the optimal offset, just permuting carry bit noise
-void idx2_scan(uint64_t work_size, uint32_t best_offset, bigint_t &mbest, std::vector<uint32_t> &best_indices, std::minstd_rand &gen, std::uniform_int_distribution<uint32_t> &dis2, const std::shared_ptr<Packet_ServerBeginRound> roundInfo, uint64_t chainHash);
+void idx2_scan(uint64_t work_size, uint32_t best_offset, bigint_t &mbest,
+               std::vector<uint32_t> &best_indices, std::minstd_rand &gen,
+               std::uniform_int_distribution<uint32_t> &dis2,
+               const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
+               uint64_t chainHash);
 
 //////////////////////////////////////////////////////////
 
-class EndpointMiner : public EndpointClient {
-private:
+class EndpointMiner : public EndpointClient
+{
+ private:
   EndpointMiner(EndpointMiner &) = delete;
   void operator=(const EndpointMiner &) = delete;
 
@@ -98,15 +110,16 @@ private:
   cl::Kernel pass2Kernel;
   cl::Buffer pass2Hashes, pass2Indices;
 
-  unsigned pass2Size = 1 << 25; // max work size
+  unsigned pass2Size = 1 << 25;  // max work size
   uint32_t *pass2Hash;
-  uint32_t *pass2Index; // base index
+  uint32_t *pass2Index;  // base index
   uint32_t *pass2Pairing;
 
-public:
+ public:
   EndpointMiner(std::string clientId, std::string minerId,
                 std::unique_ptr<Connection> &conn, std::shared_ptr<ILog> &log)
-      : EndpointClient(clientId, minerId, conn, log) {
+      : EndpointClient(clientId, minerId, conn, log)
+  {
 
     program = setupOpenCL(platforms, devices, device, context, log);
     queue = cl::CommandQueue(context, device);
@@ -128,31 +141,27 @@ public:
     pass2Pairing = new uint32_t[pass2Size]();
   }
 
-  ~EndpointMiner() {
+  ~EndpointMiner()
+  {
     delete[] pass2Hash;
     delete[] pass2Index;
     delete[] pass2Pairing;
   }
 
   virtual void MakeBid(
-      const std::shared_ptr<Packet_ServerBeginRound> roundInfo, // Information
-                                                                // about this
-                                                                // particular
-                                                                // round
-      const std::shared_ptr<Packet_ServerRequestBid> request,   // The specific
-                                                                // request we
-                                                                // received
-      double period,       // How long this bidding period will last
-      double skewEstimate, // An estimate of the time difference between us and
-                           // the server (positive -> we are ahead)
-      std::vector<uint32_t> &solution, // Our vector of indices describing the
-                                       // solution
-      uint32_t *pProof // Will contain the "proof", which is just the value
-      ) {
-    
+      const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
+      const std::shared_ptr<Packet_ServerRequestBid> request,
+      double period,        // How long this bidding period will last
+      double skewEstimate,  // An estimate of the time difference between us and
+                            // the server (positive -> we are ahead)
+      std::vector<uint32_t> &solution,  // solution -> index array
+      uint32_t *pProof                  // proof
+      )
+  {
+
     // accounts for uncertainty in network conditions
-    double tSafetyMargin = 0.5;              
-    tSafetyMargin += 0.3; // from binning //TODO
+    double tSafetyMargin = 0.5;
+    tSafetyMargin += 0.3;  // from binning //TODO
 
     double tFinish =
         request->timeStampReceiveBids * 1e-9 + skewEstimate - tSafetyMargin;
@@ -173,11 +182,11 @@ public:
     hash::fnv<64> hasher;
     uint64_t chainHash = hasher((const char *)&roundInfo->chainData[0],
                                 roundInfo->chainData.size());
-    
+
     //////////////////////////////////////////////////////////
-    
+
     Log(Log_Info, "Maxindices: %u", roundInfo->maxIndices);
-    
+
     uint32_t maxidx = roundInfo->maxIndices;
     uint32_t lg2idx = 0;
     while (maxidx != 0) {
@@ -193,36 +202,38 @@ public:
     // Log(Log_Info, "c[1]: %x", roundInfo->c[1]);
     // Log(Log_Info, "c[2]: %x", roundInfo->c[2]);
     // Log(Log_Info, "c[3]: %x", roundInfo->c[3]);
-    
+
     //////////////////////////////////////////////////////////
 
-    bigint_t mbest; // best proof found
+    bigint_t mbest;  // best proof found
     wide_ones(BIGINT_WORDS, mbest.limbs);
-    std::vector<uint32_t> best_indices; // indices of best proof
+    std::vector<uint32_t> best_indices;  // indices of best proof
 
     std::random_device rd;
     std::minstd_rand gen(rd());
     std::uniform_int_distribution<uint32_t> dis;
-    
+
     //////////////////////////////////////////////////////////
 
     // trivial case of maxindices == 1
-    if (lg2idx == 0){
-      direct_idx1_search((1<<17), mbest, best_indices, gen, dis, roundInfo, chainHash);
+    if (lg2idx == 0) {
+      direct_idx1_search((1 << 17), mbest, best_indices, gen, dis, roundInfo,
+                         chainHash);
       finaliseBid(best_indices, chainHash, roundInfo, solution, pProof);
       return;
     }
 
     //////////////////////////////////////////////////////////
-    //TODO
-    const unsigned ptvct_sz = 1 << 17; // initial point vector for diff search
-    unsigned metapass_sz = 1 << 19; // metaptvct_sz, real work
+    // TODO
+    const unsigned ptvct_sz = 1 << 17;  // initial point vector for diff search
+    unsigned metapass_sz = 1 << 19;     // metaptvct_sz, real work
 
     //////////////////////////////////////////////////////////
 
     // top 2 words of the proof with the corresponding index
     // do not need entire 8 words for the initial offset search
-    struct point_top {
+    struct point_top
+    {
       uint64_t msdw;
       uint32_t indx;
 
@@ -269,7 +280,8 @@ public:
       uint32_t next_indx = (it + 1)->indx;
 
       if (curr_indx == next_indx) {
-        //Log(Log_Verbose, "[*] Skipped identical index sample in diff finder");
+        // Log(Log_Verbose, "[*] Skipped identical index sample in diff
+        // finder");
         continue;
       }
 
@@ -292,17 +304,17 @@ public:
     t2 = now() * 1e-9;
     Log(Log_Info, "[=] total diff_find : %lg", t2 - t1);
 
-
     //////////////////////////////////////////////////////////
-    
+
     // random generator for valid base indices
     std::uniform_int_distribution<uint32_t> dis2(0, 0xFFFFFFFE - best_offset);
-    
+
     //////////////////////////////////////////////////////////
-    
+
     // done with offset search, do simple linear scan if maxindices == 2
-    if (lg2idx == 1){
-      idx2_scan((1<<17), best_offset, mbest, best_indices, gen, dis2, roundInfo, chainHash);
+    if (lg2idx == 1) {
+      idx2_scan((1 << 17), best_offset, mbest, best_indices, gen, dis2,
+                roundInfo, chainHash);
       finaliseBid(best_indices, chainHash, roundInfo, solution, pProof);
       return;
     }
@@ -311,18 +323,19 @@ public:
 
     t1 = now() * 1e-9;
 
-    struct metapoint {
+    struct metapoint
+    {
       bigint_t point;
       std::vector<uint32_t> indices;
 
-      bool operator<(metapoint const &other) const {
+      bool operator<(metapoint const &other) const
+      {
         return wide_compare(BIGINT_WORDS, point.limbs, other.point.limbs) < 0;
       }
     };
 
-    std::vector<metapoint> metaN_fb; // front buffer
-    std::vector<metapoint> metaN_bb; // back buffer
-
+    std::vector<metapoint> metaN_fb;  // front buffer
+    std::vector<metapoint> metaN_bb;  // back buffer
 
     // generate metapoint vector
     for (unsigned i = 0; i < metapass_sz; ++i) {
@@ -336,12 +349,13 @@ public:
     queue.enqueueWriteBuffer(cBuffer, CL_FALSE, 0, 4 * sizeof(uint32_t),
                              roundInfo.get()->c, nullptr, &copyEvents[0]);
     queue.enqueueWriteBuffer(pass2Indices, CL_FALSE, 0,
-                             metapass_sz * sizeof(uint32_t), pass2Index, nullptr,
-                             &copyEvents[1]);
+                             metapass_sz * sizeof(uint32_t), pass2Index,
+                             nullptr, &copyEvents[1]);
 
-    cl::NDRange offset(0); // Always start iterations at x=0, y=0
-    cl::NDRange globalSize( metapass_sz); // Global size must match the original loops
-    cl::NDRange localSize = cl::NullRange; // We don't care about local size
+    cl::NDRange offset(0);  // Always start iterations at x=0, y=0
+    cl::NDRange globalSize(
+        metapass_sz);  // Global size must match the original loops
+    cl::NDRange localSize = cl::NullRange;  // We don't care about local size
 
     pass2Kernel.setArg(3, cl_uint(roundInfo.get()->roundId));
     pass2Kernel.setArg(4, cl_uint(roundInfo.get()->roundSalt));
@@ -360,7 +374,7 @@ public:
     //////////////////////////////////////////////////////////
 
     t2 = now() * 1e-9;
-    Log(Log_Info, "[=] metapt gen : %lg", t2 - t1); // TODO
+    Log(Log_Info, "[=] metapt gen : %lg", t2 - t1); 
     t1 = now() * 1e-9;
 
     // sort positions in arrays of metapoints and corresponding indices by
@@ -376,7 +390,7 @@ public:
 #endif
 
     t2 = now() * 1e-9;
-    Log(Log_Info, "[=] metapt sort : %lg", t2 - t1); // TODO
+    Log(Log_Info, "[=] metapt sort : %lg", t2 - t1);
 
     //////////////////////////////////////////////////////////
 
@@ -394,10 +408,10 @@ public:
 
       b[0] = pass2Index[pass2Pairing[i + 1]];
       b[1] = b[0] + best_offset;
-        
-      // check for duplicates in indices and merge into sorted array 
+
+      // check for duplicates in indices and merge into sorted array
       if (merge_and_check_uniq(temp_meta.indices, a, b) == 0) {
-        //Log(Log_Verbose, "[*] Skipped identical idx in metapass");
+        // Log(Log_Verbose, "[*] Skipped identical idx in metapass");
         continue;
       }
 
@@ -407,15 +421,15 @@ public:
       // add to vector of metameta points for the potential next pass
       metaN_fb.push_back(temp_meta);
 
-       // if new best proof, record value and indices
-       if (wide_compare(BIGINT_WORDS, temp_meta.point.limbs, mbest.limbs) < 0) {
+      // if new best proof, record value and indices
+      if (wide_compare(BIGINT_WORDS, temp_meta.point.limbs, mbest.limbs) < 0) {
         mbest = temp_meta.point;
         best_indices.clear();
         best_indices.insert(best_indices.begin(), a.begin(), a.end());
         best_indices.insert(best_indices.begin(), b.begin(), b.end());
       }
     }
-  
+
     Log(Log_Info, "Best indices .size(): %zu", best_indices.size());
     double TTTemp;
     TTTemp = wide_as_double(BIGINT_WORDS, mbest.limbs);
@@ -428,15 +442,16 @@ public:
     Log(Log_Info, "[=] metapt scan : %lg", t2 - t1);
 
     //////////////////////////////////////////////////////////
-    
-    // calculate how many more passes required (as it is always worthwhile to do the extra work)
+
+    // calculate how many more passes required (as it is always worthwhile to do
+    // the extra work)
     // note: currently capped at 3 total metapasses
-    uint32_t metaN_passes = std::min(lg2idx-2, 2u);
+    uint32_t metaN_passes = std::min(lg2idx - 2, 2u);
     Log(Log_Info, "{!} %u metameta passes", metaN_passes);
 
-    // if duplicate index culling managed to empty entire work 
+    // if duplicate index culling managed to empty entire work
     // vector, we are done
-    if (metaN_fb.size() < 2){
+    if (metaN_fb.size() < 2) {
       finaliseBid(best_indices, chainHash, roundInfo, solution, pProof);
       return;
     }
@@ -455,15 +470,16 @@ public:
 
       metaN_bb.clear();
 
-      // walk over pairs of metapoints and see if their xor is the new best proof
-      // additionally, write these xors into back buffer for next metapass 
+      // walk over pairs of metapoints and see if their xor is the new best
+      // proof
+      // additionally, write these xors into back buffer for next metapass
       for (auto it = metaN_fb.begin(); it != metaN_fb.end() - 1; ++it) {
-        
+
         // check for duplicates and merge two sorted index arrays
         // maintaining the sorted invariant
         if (merge_and_check_uniq(temp_meta.indices, it->indices,
                                  (it + 1)->indices) == 0) {
-          //Log(Log_Verbose, "[*] Skipped identical idx in metapass");
+          // Log(Log_Verbose, "[*] Skipped identical idx in metapass");
           continue;
         }
 
@@ -471,7 +487,7 @@ public:
                  (it + 1)->point.limbs);
         metaN_bb.push_back(temp_meta);
 
-       // if new best proof, record value and indices
+        // if new best proof, record value and indices
         if (wide_compare(BIGINT_WORDS, temp_meta.point.limbs, mbest.limbs) <
             0) {
           mbest = temp_meta.point;
@@ -483,11 +499,11 @@ public:
         }
       }
       // swap buffers for next pass
-      std::swap(metaN_bb, metaN_fb); 
+      std::swap(metaN_bb, metaN_fb);
 
-      // if duplicate index culling managed to empty entire work 
+      // if duplicate index culling managed to empty entire work
       // vector, we are done
-      if (metaN_fb.size() < 2){
+      if (metaN_fb.size() < 2) {
         finaliseBid(best_indices, chainHash, roundInfo, solution, pProof);
         return;
       }
@@ -511,44 +527,47 @@ public:
     //  double timeBudget = tFinish - t;
     //  Log(Log_Debug, "Finish trial %d, time remaining =%lg seconds.", nTrials,
     //      timeBudget);
-    
+
     //////////////////////////////////////////////////////////
 
     finaliseBid(best_indices, chainHash, roundInfo, solution, pProof);
     return;
-
   }
 };
 
 // last thing called by makebid before quitting
 // copies proof and indices to caller
-void finaliseBid(std::vector<uint32_t> best_indices, 
-    uint64_t chainHash,const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
-    std::vector<uint32_t> &solution, uint32_t *pProof )
+void finaliseBid(std::vector<uint32_t> best_indices, uint64_t chainHash,
+                 const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
+                 std::vector<uint32_t> &solution, uint32_t *pProof)
 {
-    // reconstruct best proof
-    bigint_t proof;
-    for (auto idx : best_indices) {
-      bigint_t hash = PoolHashMiner(roundInfo.get(), idx, chainHash);
-      wide_xor(8, proof.limbs, proof.limbs, hash.limbs);
-    }
-    
-    // sort indices as they were generated out of order
-    std::sort(best_indices.begin(), best_indices.end());
+  // reconstruct best proof
+  bigint_t proof;
+  for (auto idx : best_indices) {
+    bigint_t hash = PoolHashMiner(roundInfo.get(), idx, chainHash);
+    wide_xor(8, proof.limbs, proof.limbs, hash.limbs);
+  }
 
-    // return results
-    solution = best_indices;
-    wide_copy(BIGINT_WORDS, pProof, proof.limbs);
+  // sort indices as they were generated out of order
+  std::sort(best_indices.begin(), best_indices.end());
+
+  // return results
+  solution = best_indices;
+  wide_copy(BIGINT_WORDS, pProof, proof.limbs);
 }
 
 // trivial case of maxindices == 1. Scrappy implementation for correctness.
-void direct_idx1_search(uint64_t work_size, bigint_t &mbest, std::vector<uint32_t> &best_indices, std::minstd_rand &gen, std::uniform_int_distribution<uint32_t> &dis, const std::shared_ptr<Packet_ServerBeginRound> roundInfo, uint64_t chainHash)
+void direct_idx1_search(
+    uint64_t work_size, bigint_t &mbest, std::vector<uint32_t> &best_indices,
+    std::minstd_rand &gen, std::uniform_int_distribution<uint32_t> &dis,
+    const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
+    uint64_t chainHash)
 {
-  for (unsigned i=0; i<work_size; ++i) {
+  for (unsigned i = 0; i < work_size; ++i) {
     uint32_t id = dis(gen);
     bigint_t temphash = PoolHashMiner(roundInfo.get(), id, chainHash);
 
-    if (wide_compare(BIGINT_WORDS, temphash.limbs, mbest.limbs) < 0){
+    if (wide_compare(BIGINT_WORDS, temphash.limbs, mbest.limbs) < 0) {
       mbest = temphash;
       best_indices.clear();
       best_indices.push_back(id);
@@ -558,9 +577,13 @@ void direct_idx1_search(uint64_t work_size, bigint_t &mbest, std::vector<uint32_
 
 // maxindices == 2 case, simple linear scan as we have already found
 // the optimal offset, just permuting carry bit noise
-void idx2_scan(uint64_t work_size, uint32_t best_offset, bigint_t &mbest, std::vector<uint32_t> &best_indices, std::minstd_rand &gen, std::uniform_int_distribution<uint32_t> &dis2, const std::shared_ptr<Packet_ServerBeginRound> roundInfo, uint64_t chainHash)
+void idx2_scan(uint64_t work_size, uint32_t best_offset, bigint_t &mbest,
+               std::vector<uint32_t> &best_indices, std::minstd_rand &gen,
+               std::uniform_int_distribution<uint32_t> &dis2,
+               const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
+               uint64_t chainHash)
 {
-  for (unsigned i=0; i<work_size; ++i){
+  for (unsigned i = 0; i < work_size; ++i) {
     uint32_t id = dis2(gen);
     uint32_t id2 = id + best_offset;
 
@@ -570,7 +593,7 @@ void idx2_scan(uint64_t work_size, uint32_t best_offset, bigint_t &mbest, std::v
 
     wide_xor(BIGINT_WORDS, xoredw.limbs, temphash.limbs, temphash2.limbs);
 
-    if (wide_compare(BIGINT_WORDS, xoredw.limbs, mbest.limbs) < 0){
+    if (wide_compare(BIGINT_WORDS, xoredw.limbs, mbest.limbs) < 0) {
       mbest = xoredw;
       best_indices.clear();
       best_indices.push_back(id);
@@ -579,6 +602,6 @@ void idx2_scan(uint64_t work_size, uint32_t best_offset, bigint_t &mbest, std::v
   }
 }
 
-}; // bitecoin
+};  // bitecoin
 
 #endif
