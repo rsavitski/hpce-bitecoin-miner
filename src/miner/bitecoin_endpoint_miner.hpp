@@ -1,7 +1,7 @@
 #ifndef bitecoin_miner_endpoint_hpp
 #define bitecoin_miner_endpoint_hpp
 
-#define TBB
+//#define TBB
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -64,15 +64,29 @@ int merge_and_check_uniq(std::vector<uint32_t> &res, std::vector<uint32_t> &v1,
   return 1;
 };
 
+//////////////////////////////////////////////////////////
+
+// glue to finaliseBid
+struct timing_data{
+  double tdiff_find;
+  double tdiff_per_numstep;
+  uint64_t work_sz;
+  double tmeta_start;
+  double hashrate;
+  unsigned ismeta;
+  unsigned metafactor;
+};
+
+//////////////////////////////////////////////////////////
+
 // last thing called by makebid before quitting
 // copies proof and indices to caller
-void finaliseBid(std::vector<uint32_t> best_indices, uint64_t chainHash,
-                 const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
-                 std::vector<uint32_t> &solution, uint32_t *pProof);
+void finaliseBid(timing_data &tdata, std::vector<uint32_t> best_indices, uint64_t chainHash,
+    const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
+    std::vector<uint32_t> &solution, uint32_t *pProof);
 
-// trivial case of maxindices == 1. Scrappy implementation for correctness.
-void
-direct_idx1_search(uint64_t work_size, bigint_t &mbest,
+// trivial case of maxindices == 1. Scrappy implementation for correctness
+void direct_idx1_search(uint64_t work_size, bigint_t &mbest,
                    std::vector<uint32_t> &best_indices, std::minstd_rand &gen,
                    std::uniform_int_distribution<uint32_t> &dis,
                    const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
@@ -153,17 +167,44 @@ public:
       std::vector<uint32_t> &solution, // solution -> index array
       uint32_t *pProof                 // proof
       ) {
+    
+    //////////////////////////////////////////////////////////
+
+    Log(Log_Info, "Maxindices: %u", roundInfo->maxIndices);
+
+    uint32_t maxidx = roundInfo->maxIndices;
+    uint32_t lg2idx = 0;
+    while (maxidx != 0) {
+      maxidx >>= 1;
+      lg2idx++;
+    }
+    lg2idx -= 1;
+    
+
+    Log(Log_Info, "Log2_index: %u", lg2idx);
+    Log(Log_Info, "Hashsteps: %u", roundInfo->hashSteps);
+
+    //////////////////////////////////////////////////////////
+
+    // timing setup
+    Log(Log_Info, "MakeBid - start, total period=%lg.", period);
+
+    static timing_data tdata = { .tdiff_find = 0.1, .tdiff_per_numstep = 0.01, .work_sz = 0, .tmeta_start=0, .hashrate=(1<<18) };
+
+    double tdiff_expected = tdata.tdiff_per_numstep*roundInfo->hashSteps;
 
     // accounts for uncertainty in network conditions
     double tSafetyMargin = 0.5;
-    tSafetyMargin += 0.3; // from binning //TODO
 
     double tFinish =
         request->timeStampReceiveBids * 1e-9 + skewEstimate - tSafetyMargin;
 
-    double t1, t2;
+    double timeframe = period - tSafetyMargin - tdiff_expected;
+    fprintf(stderr, "[-] time frame: %lg\n",timeframe);
 
-    Log(Log_Verbose, "MakeBid - start, total period=%lg.", period);
+    fprintf(stderr, "[-] Expected time for tdiff_find: %lg\n", tdiff_expected);
+
+    double t1, t2;
 
     //////////////////////////////////////////////////////////
 
@@ -178,25 +219,6 @@ public:
     uint64_t chainHash = hasher((const char *)&roundInfo->chainData[0],
                                 roundInfo->chainData.size());
 
-    //////////////////////////////////////////////////////////
-
-    Log(Log_Info, "Maxindices: %u", roundInfo->maxIndices);
-
-    uint32_t maxidx = roundInfo->maxIndices;
-    uint32_t lg2idx = 0;
-    while (maxidx != 0) {
-      maxidx >>= 1;
-      lg2idx++;
-    }
-    lg2idx -= 1;
-
-    Log(Log_Info, "Log2_index: %u", lg2idx);
-    Log(Log_Info, "Hashsteps: %u", roundInfo->hashSteps);
-    // Log(Log_Info, "Salt: %" PRIx64 "", roundInfo->roundSalt);
-    // Log(Log_Info, "c[0]: %x", roundInfo->c[0]);
-    // Log(Log_Info, "c[1]: %x", roundInfo->c[1]);
-    // Log(Log_Info, "c[2]: %x", roundInfo->c[2]);
-    // Log(Log_Info, "c[3]: %x", roundInfo->c[3]);
 
     //////////////////////////////////////////////////////////
 
@@ -210,18 +232,36 @@ public:
 
     //////////////////////////////////////////////////////////
 
+    // calculate work done in this round
+
+    const unsigned ptvct_sz = 1 << 17; // initial point vector for diff search
+
+    uint32_t exp_metaN_factor = (1+std::min(lg2idx - 2, 2u));
+    tdata.metafactor = exp_metaN_factor;
+    double ddt = tdata.hashrate * timeframe / double(exp_metaN_factor);
+
+    unsigned metapass_sz;
+    if (ddt < 0){
+      lg2idx = 1; // fake short work
+    }
+    tdata.ismeta = 0; //hack
+
+    metapass_sz = unsigned(ddt * 0.8); // safety factor
+    metapass_sz = std::max(metapass_sz, (1u<<16));
+    metapass_sz = std::min(metapass_sz, pass2Size);
+    fprintf(stderr, "[!] running with size: %u\n", metapass_sz);
+
+    tdata.work_sz = metapass_sz;
+
+    //////////////////////////////////////////////////////////
+    
     // trivial case of maxindices == 1
     if (lg2idx == 0) {
       direct_idx1_search((1 << 17), mbest, best_indices, gen, dis, roundInfo,
                          chainHash);
-      finaliseBid(best_indices, chainHash, roundInfo, solution, pProof);
+      finaliseBid(tdata ,best_indices, chainHash, roundInfo, solution, pProof);
       return;
     }
-
-    //////////////////////////////////////////////////////////
-    // TODO
-    const unsigned ptvct_sz = 1 << 17; // initial point vector for diff search
-    unsigned metapass_sz = 1 << 19;    // metaptvct_sz, real work
 
     //////////////////////////////////////////////////////////
 
@@ -304,7 +344,8 @@ public:
     pts.clear();
 
     t2 = now() * 1e-9;
-    Log(Log_Info, "[=] total diff_find : %lg", t2 - t1);
+    tdata.tdiff_find = t2-t1;
+    Log(Log_Info, "[=] total diff_find : %lg", tdata.tdiff_find);
 
     //////////////////////////////////////////////////////////
 
@@ -317,10 +358,13 @@ public:
     if (lg2idx == 1) {
       idx2_scan((1 << 17), best_offset, mbest, best_indices, gen, dis2,
                 roundInfo, chainHash);
-      finaliseBid(best_indices, chainHash, roundInfo, solution, pProof);
+      finaliseBid(tdata, best_indices, chainHash, roundInfo, solution, pProof);
       return;
     }
+    //////////////////////////////////////////////////////////
 
+    tdata.ismeta = 1; // hack
+    tdata.tmeta_start = now() * 1e-9;
     //////////////////////////////////////////////////////////
 
     t1 = now() * 1e-9;
@@ -452,7 +496,7 @@ public:
     // if duplicate index culling managed to empty entire work
     // vector, we are done
     if (metaN_fb.size() < 2) {
-      finaliseBid(best_indices, chainHash, roundInfo, solution, pProof);
+      finaliseBid(tdata, best_indices, chainHash, roundInfo, solution, pProof);
       return;
     }
 
@@ -504,7 +548,7 @@ public:
       // if duplicate index culling managed to empty entire work
       // vector, we are done
       if (metaN_fb.size() < 2) {
-        finaliseBid(best_indices, chainHash, roundInfo, solution, pProof);
+        finaliseBid(tdata, best_indices, chainHash, roundInfo, solution, pProof);
         return;
       }
 
@@ -523,23 +567,29 @@ public:
 
     //////////////////////////////////////////////////////////
 
-    //  double t = now() * 1e-9;  // Work out where we are against the deadline
-    //  double timeBudget = tFinish - t;
-    //  Log(Log_Debug, "Finish trial %d, time remaining =%lg seconds.", nTrials,
-    //      timeBudget);
-
-    //////////////////////////////////////////////////////////
-
-    finaliseBid(best_indices, chainHash, roundInfo, solution, pProof);
+    finaliseBid(tdata, best_indices, chainHash, roundInfo, solution, pProof);
     return;
   }
 };
 
 // last thing called by makebid before quitting
 // copies proof and indices to caller
-void finaliseBid(std::vector<uint32_t> best_indices, uint64_t chainHash,
+void finaliseBid(timing_data &tdata,std::vector<uint32_t> best_indices, uint64_t chainHash,
                  const std::shared_ptr<Packet_ServerBeginRound> roundInfo,
                  std::vector<uint32_t> &solution, uint32_t *pProof) {
+
+  // recalculate timing information for feedback
+  tdata.tdiff_per_numstep = tdata.tdiff_find/roundInfo->hashSteps;
+  fprintf(stderr, "[-] diff time per step: %lg\n", tdata.tdiff_per_numstep);
+  
+  if (tdata.ismeta){
+    double tnow = now() * 1e-9;
+    double ttaken = tnow - tdata.tmeta_start;
+    fprintf(stderr, "[***] real time taken : %lg\n", ttaken);
+    tdata.hashrate = (tdata.work_sz * double(tdata.metafactor)) / std::max(ttaken, 0.1);
+    fprintf(stderr, "[***] new hashrate : %lg\n", tdata.hashrate);
+  }
+
   // reconstruct best proof
   bigint_t proof;
   for (auto idx : best_indices) {
@@ -555,7 +605,7 @@ void finaliseBid(std::vector<uint32_t> best_indices, uint64_t chainHash,
   wide_copy(BIGINT_WORDS, pProof, proof.limbs);
 }
 
-// trivial case of maxindices == 1. Scrappy implementation for correctness.
+// trivial case of maxindices == 1. Scrappy implementation for correctness
 void
 direct_idx1_search(uint64_t work_size, bigint_t &mbest,
                    std::vector<uint32_t> &best_indices, std::minstd_rand &gen,
