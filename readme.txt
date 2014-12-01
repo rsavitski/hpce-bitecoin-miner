@@ -1,5 +1,5 @@
 ===============================================================================
-HPCE Coursework 6: bitecoin
+HPCE Coursework 6: bitecoin miner
 Ryan Savitski & Yong Wen Chua
 ===============================================================================
 General Idea:
