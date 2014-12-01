@@ -61,9 +61,3 @@ With a GPU-accelerated metapoint generation, the new bottleneck of the algorithm
 is the NlogN sorting of metapoint arrays. This is accelerated through
 parallel_sort from TBB, giving nearly linear further speedup with number of CPU
 cores.
-
-===============================================================================
-Work Partition:
-
-Yong Wen Chua - OpenCL, TBB, general project code
-Ryan Savitski - algorithmic design and makebid implementation
